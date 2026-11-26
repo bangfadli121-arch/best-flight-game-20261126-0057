@@ -19,13 +19,13 @@ const SHOT = Number(params.get('shot') || 0);
 // so the composition is exactly the one the maker chose.
 const SHOTS = {
   1: { pos: [312, 152, 965], yaw: -2.96, roll: 0, ring: 0, dusk: 0.12, score: 0, time: 240, fuel: 100 },
-  // Shot 2: close (120 m) and aimed 12° left of the gate, so the gold
-  // ring sits fully visible in the lower-right of the frame instead of
-  // hiding behind the fuselage. (Aiming straight at a 200 m gate puts
-  // the gate exactly behind the plane — the plane is far wider in frame
-  // than the gate at that range.) Ring 6 (520, 62, 620) on the runway
-  // strip, sea beyond.
-  2: { pos: [505, 90, 500], yaw: -0.086, roll: 0, ring: 6, dusk: 0.15, score: 600, time: 198, fuel: 78 },
+  // Shot 2: runway approach from the west, 220 m out and 33 m above the
+  // strip, heading due east at the low gate. The gate sits ahead in the
+  // sky (its label 14 m above eye level, so it clears the horizon) with
+  // the runway leading to it — the plane is below and behind the gate,
+  // never inside it. The label used to sit exactly on the horizon line
+  // and get cut by the sea; this pose lifts it clear into the sky.
+  2: { pos: [300, 75, 620], yaw: Math.PI / 2, roll: 0, ring: 6, dusk: 0.15, score: 600, time: 198, fuel: 78 },
   3: { pos: [-500, 215, -200], yaw: -Math.PI / 2, roll: -0.61, ring: 1, dusk: 0.25, score: 100, time: 228, fuel: 92 },
   // Shot 4: 200 m from ring 3 (-1400, 310, -1100) down its course leg,
   // instead of 1000 m away — the gold gate is full-size in frame with
@@ -39,6 +39,10 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Soft shadows: the sun throws the plane's shadow onto the terrain below.
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('gl').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -50,7 +54,18 @@ camera.position.set(500, 170, 1520);
 const sky = buildSky(scene);
 const sunLight = new THREE.DirectionalLight(0xFFB36B, 3.0);
 sunLight.position.copy(sky.sunDir).multiplyScalar(5000);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(1024, 1024);
+sunLight.shadow.camera.left = -280;
+sunLight.shadow.camera.right = 280;
+sunLight.shadow.camera.top = 280;
+sunLight.shadow.camera.bottom = -280;
+sunLight.shadow.camera.near = 50;
+sunLight.shadow.camera.far = 2600;
+sunLight.shadow.bias = -0.0004;
+sunLight.shadow.normalBias = 1.5;
 scene.add(sunLight);
+scene.add(sunLight.target);
 // Cool fill from the east so the plane and the ground never go black.
 const fillLight = new THREE.DirectionalLight(0x9DB8FF, 0.55);
 fillLight.position.set(3000, 2200, 3000);
@@ -256,6 +271,7 @@ function hudState() {
     damage: model.damage,
     pitch: model.pitchDeg(),
     roll: model.rollDeg(),
+    vspeed: model.verticalSpeed,
     nextRingLabel: def ? `RING ${rings.index + 1} AHEAD — thread the gold gate` : '',
     nextRingBearing: def ? rings.bearingToNext(model.pos) : 0,
     planeX: model.pos.x,
@@ -340,6 +356,11 @@ function frame() {
   }
 
   updateCamera(staging ? 0.016 : dt);
+  // Keep the shadow frustum centred on the plane: the sun is far away,
+  // so the light and its target both track the aircraft.
+  sunLight.position.copy(model.pos).addScaledVector(sky.sunDir, 900);
+  sunLight.target.position.copy(model.pos);
+  sunLight.target.updateMatrixWorld();
   hud.draw(hudState());
   renderer.render(scene, camera);
 }
