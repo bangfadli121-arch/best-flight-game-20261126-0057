@@ -47,7 +47,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.18;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 // Soft shadows: the sun throws the plane's shadow onto the terrain below.
 renderer.shadowMap.enabled = true;
@@ -75,11 +75,15 @@ sunLight.shadow.bias = -0.0004;
 sunLight.shadow.normalBias = 1.5;
 scene.add(sunLight);
 scene.add(sunLight.target);
-// Cool fill from the east so the plane and the ground never go black.
-const fillLight = new THREE.DirectionalLight(0x9DB8FF, 0.55);
-fillLight.position.set(3000, 2200, 3000);
+// Warm sunset bounce from the east (ref 03/08): the low western sun
+// leaves the jet's rear in shadow from the chase camera, so this low
+// warm fill rims the wings, tails and fuselage in orange — the jet
+// reads as a lit Raptor instead of a black blob. Kept moderate (0.6):
+// at 0.9 the light-grey top skin washed out to gold.
+const fillLight = new THREE.DirectionalLight(0xFF9A55, 0.6);
+fillLight.position.set(4000, 1200, 2000);
 scene.add(fillLight);
-scene.add(new THREE.HemisphereLight(0x7B2D8B, 0x0E3A3A, 1.25));
+scene.add(new THREE.HemisphereLight(0xB85A6B, 0x0E3A3A, 1.45));
 
 buildTerrain(scene);
 const aircraft = buildAircraft();
