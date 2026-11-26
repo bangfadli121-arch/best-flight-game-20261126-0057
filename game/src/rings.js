@@ -55,18 +55,22 @@ export class RingCourse {
     this.group = new THREE.Group();
     this.group.name = 'rings';
     this.meshes = [];
+    this.rims = []; // bright inner rims, recoloured with their gates
     this.labelSprite = null;
     this.labelCanvas = null;
 
     COURSE.forEach((def, i) => {
+      // A REAL 3D gate (ref 080 GARUDA RUN): a thick metallic gold
+      // torus with a lit inner rim and red chevrons — a gate you fly
+      // through, not a flat circle drawn in the sky.
       const mat = new THREE.MeshStandardMaterial({
         color: i === 0 ? GOLD : CYAN,
         emissive: i === 0 ? GOLD_EMISSIVE : CYAN,
-        emissiveIntensity: i === 0 ? 1.5 : 0.55,
-        metalness: 0.3,
-        roughness: 0.35,
+        emissiveIntensity: i === 0 ? 2.0 : 0.55,
+        metalness: 0.85,
+        roughness: 0.22,
       });
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(def.r, 1.1, 12, 40), mat);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(def.r, 1.6, 20, 64), mat);
       ring.position.set(def.x, def.y, def.z);
       // Face the incoming pilot: rings stand upright, turned toward the
       // previous gate so the hole is visible on approach.
@@ -77,14 +81,25 @@ export class RingCourse {
       this.group.add(ring);
       this.meshes.push(ring);
 
-      // Chevron ticks inside the ring, pointing at the hole.
-      const tickMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.85 });
-      for (let k = 0; k < 3; k++) {
-        const tick = new THREE.Mesh(new THREE.ConeGeometry(1.1, 3.2, 4), tickMat);
-        const a = (k / 3) * Math.PI * 2;
-        tick.position.set(Math.cos(a) * def.r * 0.82, Math.sin(a) * def.r * 0.82, 0);
-        tick.rotation.z = a + Math.PI / 2;
-        ring.add(tick);
+      // Lit inner rim: a bright gold tube just ahead of the metal gate,
+      // so the ring glows from the front like the GARUDA RUN gate.
+      const rim = new THREE.Mesh(
+        new THREE.TorusGeometry(def.r, 0.5, 12, 64),
+        new THREE.MeshBasicMaterial({ color: i === 0 ? 0xFFD75E : 0x7DF9FF }),
+      );
+      rim.position.z = 1.5;
+      ring.add(rim);
+      this.rims.push(rim);
+
+      // Red chevrons around the rim (ref 080): direction markers on
+      // the gate's front face, pointing along the rim.
+      const chevMat = new THREE.MeshBasicMaterial({ color: 0xFF2D2D });
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const chev = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2.8, 4), chevMat);
+        chev.position.set(Math.cos(a) * def.r, Math.sin(a) * def.r, 1.7);
+        chev.rotation.z = a; // point tangentially along the rim
+        ring.add(chev);
       }
     });
 
@@ -96,9 +111,9 @@ export class RingCourse {
     // 200 m: a wide halo, not a pinprick.
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({
       map: this.makeGlowTexture(), color: 0xFFB300, transparent: true,
-      opacity: 0.65, depthWrite: false,
+      opacity: 0.85, depthWrite: false,
     }));
-    this.glow.scale.set(130, 130, 1);
+    this.glow.scale.set(180, 180, 1);
     this.group.add(this.glow);
 
     scene.add(this.group);
@@ -122,7 +137,7 @@ export class RingCourse {
     const tex = ringLabelTexture(text);
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(56, 10.5, 1);
+    sprite.scale.set(64, 12, 1);
     return sprite;
   }
 
@@ -173,18 +188,22 @@ export class RingCourse {
   refresh() {
     this.meshes.forEach((ring, i) => {
       const mat = ring.material;
+      const rim = this.rims[i];
       if (i < this.index) {
         mat.color.setHex(GREEN);
         mat.emissive.setHex(GREEN);
         mat.emissiveIntensity = 0.25;
+        rim.material.color.setHex(0x9FF5C0);
       } else if (i === this.index) {
         mat.color.setHex(GOLD);
         mat.emissive.setHex(GOLD_EMISSIVE);
-        mat.emissiveIntensity = 1.5;
+        mat.emissiveIntensity = 2.0;
+        rim.material.color.setHex(0xFFD75E);
       } else {
         mat.color.setHex(CYAN);
         mat.emissive.setHex(CYAN);
         mat.emissiveIntensity = 0.55;
+        rim.material.color.setHex(0x7DF9FF);
       }
     });
     const def = this.nextDef();
@@ -215,7 +234,7 @@ export class RingCourse {
     if (next) {
       const s = 1 + Math.sin(t * 3) * 0.03;
       next.scale.setScalar(s);
-      next.material.emissiveIntensity = 1.3 + Math.sin(t * 3) * 0.35;
+      next.material.emissiveIntensity = 1.8 + Math.sin(t * 3) * 0.4;
     }
     for (let i = 0; i < this.meshes.length; i++) {
       if (i !== this.index) this.meshes[i].scale.setScalar(1);
