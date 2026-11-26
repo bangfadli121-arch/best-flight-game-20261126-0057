@@ -58,6 +58,14 @@ function islandBump(x, z, isl) {
     // Steep cone with a crater dip at the top.
     let h = isl.h * (1 - t);
     if (t < 0.2) h -= (0.2 - t) * isl.h * 1.35;
+    // Radial erosion gullies (ref 06): real ridges down the flanks so
+    // the low sun throws long shadows across the cone instead of the
+    // colour map faking relief on a smooth cone. Same 28 sectors as
+    // the colour striping, so ridges and stripes agree.
+    const ang = Math.atan2(dz, dx);
+    const gullyBand = smooth(Math.min(1, Math.max(0, (t - 0.16) / 0.14)))
+      * (1 - smooth(Math.min(1, Math.max(0, (t - 0.82) / 0.18))));
+    h += Math.sin(ang * 28 + valueNoise(x * 0.006 + 3, z * 0.006 + 8) * 3.0) * 7 * gullyBand;
     return Math.max(h, 0);
   }
   // Smooth dome.
@@ -217,12 +225,14 @@ function terrainColour(x, z, h, slope) {
     // Brightness jitter per plot, never per vertex.
     col.multiplyScalar(0.94 + cellHash(b.tb + 911, b.seg + 733) * 0.12);
     // Bund at the band edges (risers): dark brown-gold, hard edge.
+    // Thresholds widened for the 1024 px ground texture (~5.9 m/px):
+    // a 1-px bund line is what reads as a terrace edge from the air.
     const edge = Math.min(b.frac, 1 - b.frac);
-    if (edge < 0.10) col.lerp(C.bund, 0.6);
-    else if (edge < 0.22) col.lerp(C.bundGold, 0.15);
+    if (edge < 0.16) col.lerp(C.bund, 0.7);
+    else if (edge < 0.34) col.lerp(C.bundGold, 0.28);
     // Thin bund between plots along the contour.
     const sEdge = Math.min(b.segFrac, 1 - b.segFrac);
-    if (sEdge < 0.05) col.lerp(C.bund, 0.4);
+    if (sEdge < 0.08) col.lerp(C.bund, 0.5);
     return col;
   }
   // High ground: the volcano is zoned by height — dense forest on the
@@ -264,50 +274,68 @@ function terrainColour(x, z, h, slope) {
   return col;
 }
 
-// ------------------------------------------------------------------ build
-// Fine-grain detail texture, tiled over the whole heightfield: it
-// multiplies the crisp per-cell vertex colours with grass/dirt grain, so
-// the ground reads as textured terrain instead of flat colour. Mostly
-// white so the paddy patchwork keeps its own colours.
-function detailTexture() {
+// Ground texture, baked per pixel (ref 04/05/06): the old vertex-colour
+// patchwork lived on 18.75 m triangles, so terraces blurred into soft
+// blobs no matter how crisp the colour rules were. This rasterizes the
+// SAME colour rules at 1024 px over the 6000 m world (~5.9 m/px) and
+// adds per-pixel grain, so contour bands, bunds and rock speckle stay
+// sharp at screenshot distance. Deterministic: only seeded hashes.
+// UV mapping: PlaneGeometry u = (x+3000)/6000, v = 1 at z = -3000, and
+// CanvasTexture flipY puts canvas row 0 at v = 1 — pixel (i, j) is
+// world (x = -3000 + i*step, z = -3000 + j*step). Matches exactly.
+function groundTexture() {
+  const S = 1024;
   const c = document.createElement('canvas');
-  c.width = c.height = 256;
+  c.width = c.height = S;
   const g = c.getContext('2d');
-  g.fillStyle = '#F2F2EC';
-  g.fillRect(0, 0, 256, 256);
-  let seed = 1234567;
-  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  for (let i = 0; i < 5200; i++) {
-    const v = 0.82 + rnd() * 0.18;
-    const warm = rnd() > 0.72;
-    g.fillStyle = warm
-      ? `rgba(150,120,70,${0.10 + rnd() * 0.14})`
-      : `rgba(${Math.floor(70 * v)},${Math.floor(95 * v)},${Math.floor(60 * v)},${0.08 + rnd() * 0.12})`;
-    const s = 1 + rnd() * 2.2;
-    g.fillRect(rnd() * 256, rnd() * 256, s, s);
+  const img = g.createImageData(S, S);
+  const data = img.data;
+  const step = WORLD_SIZE / (S - 1);
+  // Heights once, on the pixel grid — the colour pass reuses them.
+  const H = new Float32Array(S * S);
+  for (let j = 0; j < S; j++) {
+    const z = (j / (S - 1) - 0.5) * WORLD_SIZE;
+    for (let i = 0; i < S; i++) {
+      const x = (i / (S - 1) - 0.5) * WORLD_SIZE;
+      H[j * S + i] = terrainHeight(x, z);
+    }
   }
-  // Short grass-blade strokes.
-  g.strokeStyle = 'rgba(60,90,50,0.16)';
-  g.lineWidth = 1;
-  for (let i = 0; i < 700; i++) {
-    const x = rnd() * 256, y = rnd() * 256;
-    g.beginPath();
-    g.moveTo(x, y);
-    g.lineTo(x + (rnd() - 0.5) * 3, y - 2 - rnd() * 3);
-    g.stroke();
+  const tmp = new THREE.Color();
+  for (let j = 0; j < S; j++) {
+    const z = (j / (S - 1) - 0.5) * WORLD_SIZE;
+    for (let i = 0; i < S; i++) {
+      const x = (i / (S - 1) - 0.5) * WORLD_SIZE;
+      const h = H[j * S + i];
+      const hx = H[j * S + Math.min(S - 1, i + 1)] - h;
+      const hz = H[Math.min(S - 1, j + 1) * S + i] - h;
+      const slope = Math.min(1, Math.sqrt(hx * hx + hz * hz) / step);
+      tmp.copy(terrainColour(x, z, h, slope));
+      // Fine grain: two-octave value noise + dark/light specks, so no
+      // patch is ever one flat tone at close range.
+      const n = valueNoise(x * 0.35, z * 0.35) * 0.6 + valueNoise(x * 1.4 + 50, z * 1.4 + 50) * 0.4;
+      let m = 1 + n * 0.07;
+      const sp = hash2(Math.floor(x * 0.9), Math.floor(z * 0.9));
+      if (sp > 0.95) m *= 0.82;
+      else if (sp < 0.03) m *= 1.08;
+      const k = (j * S + i) * 4;
+      data[k] = Math.min(255, Math.max(0, tmp.r * 255 * m));
+      data[k + 1] = Math.min(255, Math.max(0, tmp.g * 255 * m));
+      data[k + 2] = Math.min(255, Math.max(0, tmp.b * 255 * m));
+      data[k + 3] = 255;
+    }
   }
+  g.putImageData(img, 0, 0);
   const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(250, 250);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   return tex;
 }
 
 // Sea bump: fine wave texture everywhere (ref 10) — small ripples plus
 // a larger swell — so the water reads as real sea, not a flat mirror.
-// Without it the low sun paints one solid spotlight beam on the water;
-// with it the glint shatters into sparkles, the way real water does.
+// The fine ripples are HIGH contrast and dense: they are the micro-facets
+// that shatter the sun glint into sparkles (ref 08) instead of one
+// smooth beam. Bright specks are the glitter points themselves.
 function seaBumpTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
@@ -317,31 +345,38 @@ function seaBumpTexture() {
   let seed = 777;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   // Broad swell first (big soft blobs), then fine ripples on top.
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 46; i++) {
     const v = 112 + Math.floor(rnd() * 32);
-    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 26 + rnd() * 30);
+    const r = 26 + rnd() * 30;
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, r);
     grad.addColorStop(0, `rgba(${v},${v},${v},0.35)`);
     grad.addColorStop(1, `rgba(${v},${v},${v},0)`);
     g.save();
     g.translate(rnd() * 256, rnd() * 256);
     g.fillStyle = grad;
-    g.beginPath(); g.arc(0, 0, 26 + rnd() * 30, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fill();
     g.restore();
   }
-  for (let i = 0; i < 1400; i++) {
-    const v = 96 + Math.floor(rnd() * 64);
-    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 4 + rnd() * 10);
-    grad.addColorStop(0, `rgba(${v},${v},${v},0.5)`);
+  for (let i = 0; i < 3200; i++) {
+    const v = 56 + Math.floor(rnd() * 144);
+    const r = 2 + rnd() * 6;
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, r);
+    grad.addColorStop(0, `rgba(${v},${v},${v},0.65)`);
     grad.addColorStop(1, `rgba(${v},${v},${v},0)`);
     g.save();
     g.translate(rnd() * 256, rnd() * 256);
     g.fillStyle = grad;
-    g.beginPath(); g.arc(0, 0, 4 + rnd() * 10, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fill();
     g.restore();
+  }
+  for (let i = 0; i < 500; i++) {
+    const v = 200 + Math.floor(rnd() * 55);
+    g.fillStyle = `rgba(${v},${v},${v},0.8)`;
+    g.fillRect(rnd() * 256, rnd() * 256, 1.5, 1.5);
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(40, 40);
+  tex.repeat.set(70, 70);
   return tex;
 }
 
@@ -390,50 +425,43 @@ export function buildTerrain(scene) {
   group.name = 'terrain';
 
   // Heightfield mesh, 320 x 320 segments over the world square: 18.75 m
-  // per vertex, so the paddy patchwork below lands on crisp cell edges
-  // instead of smearing across 30 m triangles.
+  // per vertex for the silhouette. Colour comes from the baked 1024 px
+  // ground texture (map), NOT from vertex colours — vertex colours were
+  // the flat look. Normals still come from the geometry.
   const SEG = 320;
   const geo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, SEG, SEG);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
-  const colours = new Float32Array(pos.count * 3);
-  const tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
-    const h = terrainHeight(x, z);
-    pos.setY(i, h);
-    // Slope from a small forward difference, for rock-on-steep colouring.
-    const hx = terrainHeight(x + 6, z) - h;
-    const hz = terrainHeight(x, z + 6) - h;
-    const slope = Math.min(1, Math.sqrt(hx * hx + hz * hz) / 6);
-    tmp.copy(terrainColour(x, z, h, slope));
-    colours[i * 3] = tmp.r; colours[i * 3 + 1] = tmp.g; colours[i * 3 + 2] = tmp.b;
+    pos.setY(i, terrainHeight(x, z));
   }
-  geo.setAttribute('color', new THREE.BufferAttribute(colours, 3));
   geo.computeVertexNormals();
   const ground = new THREE.Mesh(
     geo,
-    new THREE.MeshStandardMaterial({ vertexColors: true, map: detailTexture(), roughness: 0.95, metalness: 0 }),
+    new THREE.MeshStandardMaterial({ map: groundTexture(), roughness: 0.95, metalness: 0 }),
   );
   ground.name = 'ground';
   ground.receiveShadow = true;
   group.add(ground);
 
   // Sea: a wide disc, turquoise near the islands, deep teal far out.
-  // Phong specular gives the sun a NARROW glint path across the water:
-  // high shininess and a dimmer specular keep it a thin bright lane
-  // instead of the wide spotlight beam it used to be.
+  // Phong specular gives the sun a BROAD glitter field across the
+  // water (ref 08): lower shininess + brighter warm specular, broken
+  // into sparkles by the dense bump map — not the thin smooth beam it
+  // used to be. Base water is a touch deeper so the glitter reads.
+  const tmp = new THREE.Color();
   const seaGeo = new THREE.CircleGeometry(9500, 64);
   seaGeo.rotateX(-Math.PI / 2);
   const spos = seaGeo.attributes.position;
   const seaCols = new Float32Array(spos.count * 3);
-  const near = new THREE.Color(0x35D0C0), far = new THREE.Color(0x1E9AA8);
+  const near = new THREE.Color(0x2AB8AC), far = new THREE.Color(0x17707E);
   for (let i = 0; i < spos.count; i++) {
     const x = spos.getX(i), z = spos.getZ(i);
     const r = Math.sqrt(x * x + z * z) / 9500;
     tmp.copy(near).lerp(far, Math.min(1, r * 1.4));
     // Fine streak variation (ref 10): the sea is never one flat tone.
-    tmp.multiplyScalar(0.98 + valueNoise(x * 0.02, z * 0.02) * 0.08);
+    tmp.multiplyScalar(0.96 + valueNoise(x * 0.02, z * 0.02) * 0.15);
     seaCols[i * 3] = tmp.r; seaCols[i * 3 + 1] = tmp.g; seaCols[i * 3 + 2] = tmp.b;
   }
   seaGeo.setAttribute('color', new THREE.BufferAttribute(seaCols, 3));
@@ -441,8 +469,8 @@ export function buildTerrain(scene) {
     seaGeo,
     new THREE.MeshPhongMaterial({
       vertexColors: true, transparent: true, opacity: 0.96,
-      shininess: 260, specular: 0x8A5A2A, emissive: 0x062226,
-      bumpMap: seaBumpTexture(), bumpScale: 0.5,
+      shininess: 130, specular: 0xFFC27A, emissive: 0x082A2E,
+      bumpMap: seaBumpTexture(), bumpScale: 1.2,
     }),
   );
   sea.position.y = 0.4;
