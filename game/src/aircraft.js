@@ -52,6 +52,13 @@ function raptorDecalTexture() {
   return tex;
 }
 
+// v18 (fadli: "sama aja jelek" — the v17 jet is still DARK NAVY):
+// SILVER skin. The v17 base (#6E-#8E) x multiply 0xBCC4CC gave an
+// albedo of ~0.4 — dark navy from the chase camera, while fadli-15b/15c
+// are light silver-grey. Base is now near-white silver, the multiply
+// colour is near-white too, and the panel lines are pale and faint, so
+// the jet reads SILVER, not navy. The grid that segmented the body into
+// boxes is gone with the dark lines.
 // Top-skin texture (ref 02): panel mosaic on a MID-grey base. The v13
 // skin was too pale and too glossy — under the low sun on the banking
 // shot it washed out to white-gold. This base is a full stop darker
@@ -64,9 +71,9 @@ function panelTexture() {
   c.width = c.height = 512;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, '#8E969E');
-  grad.addColorStop(0.5, '#7E868F');
-  grad.addColorStop(1, '#6E767F');
+  grad.addColorStop(0, '#D8DDE2');
+  grad.addColorStop(0.5, '#C9CFD6');
+  grad.addColorStop(1, '#B9C0C8');
   g.fillStyle = grad;
   g.fillRect(0, 0, 512, 512);
   // Weathering blotches + large soft two-tone patches: the patchwork
@@ -80,14 +87,14 @@ function panelTexture() {
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   for (let i = 0; i < 8; i++) {
     const x = rnd() * 512, y = rnd() * 512, w = 60 + rnd() * 130, h = 50 + rnd() * 110;
-    g.fillStyle = rnd() > 0.5 ? 'rgba(128,138,150,0.14)' : 'rgba(88,96,106,0.14)';
+    g.fillStyle = rnd() > 0.5 ? 'rgba(210,216,222,0.12)' : 'rgba(150,160,170,0.12)';
     g.fillRect(x - w / 2, y - h / 2, w, h);
   }
   for (let i = 0; i < 36; i++) {
     const x = rnd() * 512, y = rnd() * 512, r = 20 + rnd() * 60;
     const bg = g.createRadialGradient(x, y, 0, x, y, r);
     const dark = rnd() > 0.45;
-    bg.addColorStop(0, dark ? 'rgba(70,78,88,0.24)' : 'rgba(160,168,178,0.16)');
+    bg.addColorStop(0, dark ? 'rgba(120,130,142,0.12)' : 'rgba(215,221,227,0.12)');
     bg.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = bg;
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
@@ -99,8 +106,11 @@ function panelTexture() {
   // v16b: irregular spacing + half the alpha — the v15 even 10x10 grid
   // read as a chessboard of boxes on the smooth fuselage. Real panel
   // lines are uneven and subtle.
-  g.strokeStyle = 'rgba(40,48,58,0.5)';
-  g.lineWidth = 2;
+  // v18: pale faint lines — the v17 near-black 0.5-alpha grid segmented
+  // the smooth fuselage into boxes ("kotak-kotak"). Real panel lines at
+  // chase distance are a whisper, not a grid.
+  g.strokeStyle = 'rgba(96,106,118,0.28)';
+  g.lineWidth = 1.5;
   for (const y of [44, 96, 152, 214, 272, 336, 398, 462]) {
     g.beginPath(); g.moveTo(16, y); g.lineTo(496, y); g.stroke();
   }
@@ -110,7 +120,7 @@ function panelTexture() {
   // Distinct panel shades (fadli-15c): neighbouring panels are slightly
   // different greys, each outlined — the patchwork skin of the real jet.
   // Drawn AFTER the grid so the outlines sit on top of the lines.
-  const panelShades = ['#8B939D', '#6A727C', '#565E66', '#9AA2AB', '#7A828C', '#B0B8C0'];
+  const panelShades = ['#DDE2E7', '#C4CBD2', '#B2BAC2', '#E4E8EC', '#CCD2D9', '#BFC6CD'];
   for (let i = 0; i < 14; i++) {
     const x = 20 + rnd() * 400, y = 20 + rnd() * 400;
     const w = 44 + rnd() * 90, h = 36 + rnd() * 70;
@@ -122,7 +132,7 @@ function panelTexture() {
     g.globalAlpha = 1;
   }
   // Finer secondary seams.
-  g.strokeStyle = 'rgba(64,72,82,0.45)';
+  g.strokeStyle = 'rgba(96,106,118,0.20)';
   g.lineWidth = 1.5;
   for (const y of [64, 112, 160, 208, 256, 304, 352, 400, 448]) {
     g.beginPath(); g.moveTo(20, y); g.lineTo(492, y); g.stroke();
@@ -134,14 +144,14 @@ function panelTexture() {
   g.beginPath(); g.moveTo(20, 470); g.lineTo(256, 300); g.lineTo(492, 470); g.stroke();
   g.beginPath(); g.moveTo(60, 60); g.lineTo(256, 210); g.lineTo(452, 60); g.stroke();
   // Access panels: small stroked rectangles scattered on the skin.
-  g.strokeStyle = 'rgba(54,62,72,0.55)';
-  g.lineWidth = 2;
+  g.strokeStyle = 'rgba(96,106,118,0.22)';
+  g.lineWidth = 1.5;
   for (let i = 0; i < 28; i++) {
     const x = 30 + rnd() * 420, y = 30 + rnd() * 420;
     g.strokeRect(x, y, 34 + rnd() * 26, 22 + rnd() * 16);
   }
   // Rivet dots along the chordwise lines.
-  g.fillStyle = 'rgba(64,72,82,0.45)';
+  g.fillStyle = 'rgba(96,106,118,0.22)';
   for (const y of [48, 120, 200, 280, 360, 440]) {
     for (let x = 30; x < 500; x += 12) { g.fillRect(x, y - 1, 2, 2); }
   }
@@ -168,15 +178,15 @@ function finTexture() {
   c.width = c.height = 256;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, '#A8B0B8');
-  grad.addColorStop(0.5, '#98A0A9');
-  grad.addColorStop(1, '#8A929B');
+  grad.addColorStop(0, '#DDE2E7');
+  grad.addColorStop(0.5, '#CCD2D9');
+  grad.addColorStop(1, '#BCC3CB');
   g.fillStyle = grad;
   g.fillRect(0, 0, 256, 256);
   let seed = 7777;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   // Distinct panel shades (fadli-15c: the fin is a patchwork of greys).
-  const shades = ['#B4BCC4', '#8A929B', '#767E87', '#A2ABB3'];
+  const shades = ['#E2E6EA', '#C9CFD6', '#B7BFC7', '#D5DAE0'];
   for (let i = 0; i < 6; i++) {
     const x = rnd() * 190, y = rnd() * 190, w = 40 + rnd() * 90, h = 30 + rnd() * 70;
     g.fillStyle = shades[i % shades.length];
@@ -186,19 +196,19 @@ function finTexture() {
     g.globalAlpha = 1;
   }
   // Horizontal panel lines (chordwise stations on the fin).
-  // v16b: softer — the v15 lines were near-black and heavy.
-  g.strokeStyle = 'rgba(48,56,66,0.5)';
-  g.lineWidth = 2;
+  // v18: pale and faint like the fuselage lines.
+  g.strokeStyle = 'rgba(96,106,118,0.25)';
+  g.lineWidth = 1.5;
   for (const y of [32, 80, 128, 176, 224]) {
     g.beginPath(); g.moveTo(8, y); g.lineTo(248, y); g.stroke();
   }
   // Two diagonal seams following the fin's sweep.
-  g.strokeStyle = 'rgba(64,72,82,0.5)';
-  g.lineWidth = 2;
+  g.strokeStyle = 'rgba(96,106,118,0.25)';
+  g.lineWidth = 1.5;
   g.beginPath(); g.moveTo(20, 240); g.lineTo(150, 20); g.stroke();
   g.beginPath(); g.moveTo(90, 240); g.lineTo(220, 30); g.stroke();
   // Rivets along the horizontal lines.
-  g.fillStyle = 'rgba(64,72,82,0.5)';
+  g.fillStyle = 'rgba(96,106,118,0.25)';
   for (const y of [32, 80, 128, 176, 224]) {
     for (let x = 16; x < 248; x += 12) { g.fillRect(x, y - 1, 2, 2); }
   }
@@ -218,9 +228,9 @@ function intakeDecalTexture() {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 64;
   const g = c.getContext('2d');
-  g.fillStyle = '#6E767F';
+  g.fillStyle = '#7C848E'; // v18: matches the lightened intake duct
   g.fillRect(0, 0, 256, 64);
-  g.strokeStyle = 'rgba(40,48,58,0.8)';
+  g.strokeStyle = 'rgba(96,106,118,0.6)'; // v18: softer placard border
   g.lineWidth = 2;
   g.strokeRect(4, 4, 248, 56);
   g.beginPath(); g.moveTo(128, 4); g.lineTo(128, 60); g.stroke();
@@ -404,12 +414,12 @@ function airfoilWingGeometry({ s0, s1, chordRoot, chordTip, thick = 0.10, camber
 function finLoftGeometry() {
   const stations = [
     // [height, chord, chordCentreZ, thicknessRatio]
-    [0.00, 1.50, 0.00, 0.10],
-    [0.55, 1.32, -0.06, 0.10],
-    [1.10, 1.02, -0.14, 0.10],
-    [1.45, 0.82, -0.20, 0.10],
-    [1.75, 0.58, -0.26, 0.10],
-    [2.10, 0.32, -0.32, 0.10],
+    [0.00, 1.50, 0.00, 0.12],
+    [0.55, 1.32, -0.06, 0.12],
+    [1.10, 1.02, -0.14, 0.12],
+    [1.45, 0.82, -0.20, 0.12],
+    [1.75, 0.58, -0.26, 0.12],
+    [2.10, 0.32, -0.32, 0.12],
   ];
   const section = airfoilRing(1, 14); // unit thickness, scaled per station
   const nSec = section.length;
@@ -642,15 +652,15 @@ function wingTexture() {
   c.width = 512; c.height = 512;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 512, 512);
-  grad.addColorStop(0, '#969EA7');
-  grad.addColorStop(0.5, '#868E97');
-  grad.addColorStop(1, '#767E87');
+  grad.addColorStop(0, '#DDE2E7');
+  grad.addColorStop(0.5, '#CBD1D8');
+  grad.addColorStop(1, '#BCC3CB');
   g.fillStyle = grad;
   g.fillRect(0, 0, 512, 512);
   let seed = 9917;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   // Panel shade patches (tile-friendly: drawn inside the tile).
-  const shades = ['#9AA2AB', '#7A828C', '#6A727C', '#A8B0B8'];
+  const shades = ['#E0E4E9', '#C9CFD6', '#B7BFC7', '#D8DDE2'];
   for (let i = 0; i < 8; i++) {
     const x = rnd() * 400, y = rnd() * 400, w = 60 + rnd() * 90, h = 50 + rnd() * 80;
     g.fillStyle = shades[i % shades.length];
@@ -662,15 +672,15 @@ function wingTexture() {
   for (let i = 0; i < 14; i++) {
     const x = rnd() * 512, y = rnd() * 512, r = 30 + rnd() * 70;
     const bg = g.createRadialGradient(x, y, 0, x, y, r);
-    bg.addColorStop(0, rnd() > 0.5 ? 'rgba(96,104,114,0.18)' : 'rgba(165,173,183,0.14)');
+    bg.addColorStop(0, rnd() > 0.5 ? 'rgba(130,140,152,0.12)' : 'rgba(215,221,227,0.12)');
     bg.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = bg;
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
   }
   // Panel grid: chordwise + spanwise seams, every 128 px (tiles cleanly).
-  // v16b: softer — the v15 grid + outlined patches read as boxes.
-  g.strokeStyle = 'rgba(48,56,66,0.35)';
-  g.lineWidth = 2;
+  // v18: pale and faint — the v17 grid segmented the wing into boxes.
+  g.strokeStyle = 'rgba(96,106,118,0.20)';
+  g.lineWidth = 1.5;
   for (const y of [128, 256, 384]) {
     g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke();
   }
@@ -678,14 +688,14 @@ function wingTexture() {
     g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 512); g.stroke();
   }
   // Flap / aileron hinge line + trailing-edge strip.
-  g.strokeStyle = 'rgba(40,48,58,0.7)';
-  g.lineWidth = 3;
-  g.beginPath(); g.moveTo(0, 440); g.lineTo(512, 440); g.stroke();
-  g.strokeStyle = 'rgba(64,72,82,0.4)';
+  g.strokeStyle = 'rgba(96,106,118,0.35)';
   g.lineWidth = 2;
+  g.beginPath(); g.moveTo(0, 440); g.lineTo(512, 440); g.stroke();
+  g.strokeStyle = 'rgba(96,106,118,0.20)';
+  g.lineWidth = 1.5;
   g.beginPath(); g.moveTo(0, 470); g.lineTo(512, 470); g.stroke();
   // Two soft diagonal seams for the panel feel, low alpha.
-  g.strokeStyle = 'rgba(64,72,82,0.35)';
+  g.strokeStyle = 'rgba(96,106,118,0.18)';
   g.beginPath(); g.moveTo(40, 480); g.lineTo(300, 40); g.stroke();
   g.beginPath(); g.moveTo(220, 480); g.lineTo(480, 60); g.stroke();
   // v16b: access-panel rectangles removed — stroked boxes on the wing.
@@ -702,22 +712,21 @@ export function buildAircraft() {
   const group = new THREE.Group();
   group.name = 'aircraft';
 
-  // v15 materials: LIGHTER than v14 across the board — the v14 jet read
-  // as a dark silhouette from the chase camera because the shadow side
-  // had only the hemisphere light. The base greys are a stop lighter,
-  // metalness is lower (metal goes near-black in shadow with no env map),
-  // and a warm chase-fill light (below) lifts the rear faces — the jet
-  // must read LIGHT GREY from behind, like fadli-15b.
-  const stealth = new THREE.MeshStandardMaterial({ color: 0x6E767F, metalness: 0.20, roughness: 0.62 });
-  const stealthTop = new THREE.MeshStandardMaterial({ map: panelTexture(), color: 0xBCC4CC, metalness: 0.15, roughness: 0.72 });
+  // v18 materials: SILVER (fadli-15b/15c). The v17 base greys gave an
+  // albedo of ~0.4 — dark navy from the chase camera. Albedo is now
+  // ~0.7 (near-white textures x near-white multiply), metalness stays
+  // low (metal goes near-black in shadow with no env map) and roughness
+  // drops a touch so the low sun sheens the skin instead of chalking it.
+  const stealth = new THREE.MeshStandardMaterial({ color: 0xA9B1B9, metalness: 0.25, roughness: 0.55 });
+  const stealthTop = new THREE.MeshStandardMaterial({ map: panelTexture(), color: 0xDDE2E7, metalness: 0.25, roughness: 0.58 });
   // Wing skin: the detailed texture above — panel grid + hinge line.
-  const wingTop = new THREE.MeshStandardMaterial({ map: wingTexture(), color: 0xA8B0BA, metalness: 0.15, roughness: 0.72 });
+  const wingTop = new THREE.MeshStandardMaterial({ map: wingTexture(), color: 0xD5DAE0, metalness: 0.25, roughness: 0.58 });
   // Fin skin: light grey with its own panel texture — fin and body are
   // ONE aircraft (fadli-15b), never a dark board on a grey body.
   const finTex = finTexture();
-  const finMat = new THREE.MeshStandardMaterial({ map: finTex, color: 0xC8CDD4, metalness: 0.12, roughness: 0.72 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x4A5058, metalness: 0.5, roughness: 0.5 });
-  const nozzleMat = new THREE.MeshStandardMaterial({ color: 0x2E3238, metalness: 0.35, roughness: 0.6 }); // v16b dulled: the 0.85-metal duct blew white under the chase fill
+  const finMat = new THREE.MeshStandardMaterial({ map: finTex, color: 0xDDE2E7, metalness: 0.25, roughness: 0.58 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x767E87, metalness: 0.4, roughness: 0.55 });
+  const nozzleMat = new THREE.MeshStandardMaterial({ color: 0x3D4248, metalness: 0.35, roughness: 0.6 });
   const emberRectTex = emberRectTexture();
   const lerxDecalTex = lerxDecalTexture();
   // Canopy glass: v15 brighter gold (fadli-15c — the canopy is a big
@@ -763,7 +772,7 @@ export function buildAircraft() {
   const fuseTex = panelTexture();
   fuseTex.repeat.set(1, 1);
   fuseTex.offset.set(0, 0);
-  const fuselageMat = new THREE.MeshStandardMaterial({ map: fuseTex, color: 0xBCC4CC, metalness: 0.15, roughness: 0.72 });
+  const fuselageMat = new THREE.MeshStandardMaterial({ map: fuseTex, color: 0xDDE2E7, metalness: 0.25, roughness: 0.58 });
   const fuselage = new THREE.Mesh(fuselageGeometry(interpStations(FUSELAGE_STATIONS)), fuselageMat);
   fuselage.name = 'fuselage';
   group.add(fuselage);
@@ -787,7 +796,7 @@ export function buildAircraft() {
     // extruded plate. Same planform as v15 (root chord 3.7 m, span
     // 9.0 m), same position and slight anhedral.
     const wing = new THREE.Mesh(
-      airfoilWingGeometry({ s0: 0.45, s1: 4.52, chordRoot: 3.7, chordTip: 0.8, thick: 0.10, camber: 0.16, side }),
+      airfoilWingGeometry({ s0: 0.45, s1: 4.52, chordRoot: 3.7, chordTip: 0.8, thick: 0.13, camber: 0.20, side }),
       wingTop,
     );
     wing.position.set(0, -0.18, -0.9);
@@ -798,7 +807,7 @@ export function buildAircraft() {
     // smooth cambered strake — the F-22's chined forebody extension,
     // visible on the banking shot.
     const lerx = new THREE.Mesh(
-      airfoilWingGeometry({ s0: 0.4, s1: 1.9, chordRoot: 2.4, chordTip: 0.8, thick: 0.10, camber: 0.06, side }),
+      airfoilWingGeometry({ s0: 0.4, s1: 1.9, chordRoot: 2.4, chordTip: 0.8, thick: 0.12, camber: 0.08, side }),
       wingTop,
     );
     lerx.position.set(0, 0.02, 2.4);
@@ -880,7 +889,7 @@ export function buildAircraft() {
   // v16: smooth lofted airfoils like the wings.
   for (const side of [-1, 1]) {
     const stab = new THREE.Mesh(
-      airfoilWingGeometry({ s0: 0.1, s1: 2.0, chordRoot: 1.2, chordTip: 0.65, thick: 0.10, camber: 0.05, side }),
+      airfoilWingGeometry({ s0: 0.1, s1: 2.0, chordRoot: 1.2, chordTip: 0.65, thick: 0.12, camber: 0.07, side }),
       wingTop,
     );
     stab.position.set(0, -0.05, -5.0);
@@ -946,7 +955,7 @@ export function buildAircraft() {
       depth: 0.1, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02,
       bevelSegments: 2, curveSegments: 12,
     });
-    const frame = new THREE.Mesh(frameGeo, new THREE.MeshStandardMaterial({ color: 0x6E7278, metalness: 0.4, roughness: 0.55 }));
+    const frame = new THREE.Mesh(frameGeo, new THREE.MeshStandardMaterial({ color: 0x9AA2AB, metalness: 0.4, roughness: 0.55 }));
     frame.position.set(side * 0.32, -0.02, -6.30);
     group.add(frame);
     // Dark interior plane deep in the bore (behind the ember).
@@ -984,16 +993,16 @@ export function buildAircraft() {
   // photo) instead of a black silhouette. A point light, not a
   // directional: its falloff (distance 45) means it lights the jet and
   // almost nothing else — the terrain 100+ m away is untouched.
-  const chaseFill = new THREE.PointLight(0xFFC08A, 48, 45, 1.5); // v17: 48 — the 3/4 camera sees more flank, so the fill rises a touch (v16b's 55 blew a white specular disc onto the smooth spine; stay below it)
-  chaseFill.position.set(0, -1.5, -10);
+  const chaseFill = new THREE.PointLight(0xFFC08A, 48, 45, 1.5); // v18: moved UP onto the camera side (-3.5, 3.5, -12) — the v17 light sat below-behind (0, -1.5, -10) and lit the belly, while the chase camera sees the top + rear flank; same intensity 48, the directional camera key in main.js does the heavy lifting now
+  chaseFill.position.set(-3.5, 3.5, -12);
   group.add(chaseFill);
   for (const side of [-1, 1]) {
     const fg = new THREE.Group();
     fg.position.set(side * 0.32, -0.02, -6.3);
-    fg.add(flameCone(0xFF7A18, 0.20, 1.1, 0.30)); // v15b: shorter — the 1.8 m cones read as giant fangs from behind
-    fg.add(flameCone(0xFFD75E, 0.12, 1.0, 0.6));
-    fg.add(flameCone(0x66CCFF, 0.06, 0.55, 0.6));
-    fg.add(flameCone(0xFFF6D8, 0.04, 0.4, 0.8)); // white-hot core
+    fg.add(flameCone(0xFF7A18, 0.20, 0.75, 0.22)); // v18: the flame lives INSIDE the rectangular nozzle (fadli-15b) — the external sheet is short and dim, the ember rect does the talking; the v17 long bright cones read as two yellow-white tongues
+    fg.add(flameCone(0xFFD75E, 0.11, 0.6, 0.35));
+    fg.add(flameCone(0x66CCFF, 0.06, 0.4, 0.4));
+    fg.add(flameCone(0xFFF6D8, 0.035, 0.3, 0.55)); // white-hot core
     fg.scale.set(0.001, 0.001, 0.001);
     fg.visible = false;
     group.add(fg);
