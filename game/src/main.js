@@ -18,7 +18,9 @@ const SHOT = Number(params.get('shot') || 0);
 // Staged poses for the four screenshots: real game states, frozen in place
 // so the composition is exactly the one the maker chose.
 const SHOTS = {
-  1: { pos: [312, 152, 965], yaw: -2.96, roll: 0, ring: 0, dusk: 0.12, score: 0, time: 240, fuel: 100 },
+  // Jet cruise at 900 km/h with the burners lit for the cover: gold gate
+  // ahead, terraces + village + volcano behind it.
+  1: { pos: [312, 152, 965], yaw: -2.96, roll: 0, ring: 0, dusk: 0.12, score: 0, time: 240, fuel: 100, speed: 250, throttle: 0.95, ab: true },
   // Shot 2: runway approach from the NORTH-WEST, 260 m out, heading
   // south-east at the low gate. The old head-on pose from the west put
   // the gate edge-on to the camera (the ring faces the previous gate,
@@ -26,16 +28,19 @@ const SHOTS = {
   // reads as a glowing ellipse ahead of the plane, the runway leads to
   // it, and the village sits left of the strip — the label stays in the
   // sky, the plane stays below and behind the gate, never inside it.
-  2: { pos: [350, 80, 820], yaw: 2.44, roll: 0, ring: 6, dusk: 0.15, score: 600, time: 198, fuel: 78 },
+  // Jet approach speed: 95 m/s (~340 km/h), burners off.
+  2: { pos: [350, 80, 820], yaw: 2.44, roll: 0, ring: 6, dusk: 0.15, score: 600, time: 198, fuel: 78, speed: 95, throttle: 0.45, ab: false },
   // Shot 3: banking turn toward the sun, yawed a touch south of due west
   // so the sea glint sits left of centre instead of straight down the
-  // middle of the frame.
-  3: { pos: [-500, 215, -200], yaw: -1.45, roll: -0.61, ring: 1, dusk: 0.25, score: 100, time: 228, fuel: 92 },
+  // middle of the frame. Burners lit on the bank.
+  3: { pos: [-500, 215, -200], yaw: -1.45, roll: -0.61, ring: 1, dusk: 0.25, score: 100, time: 228, fuel: 92, speed: 250, throttle: 0.9, ab: true },
   // Shot 4: 200 m from ring 3 (-1400, 310, -1100) down its course leg,
   // instead of 1000 m away — the gold gate is full-size in frame with
   // the snowy volcano cone right behind it.
-  4: { pos: [-1272, 305, -946], yaw: -2.45, roll: 0, ring: 3, dusk: 0.8, score: 300, time: 204, fuel: 85 },
+  4: { pos: [-1272, 305, -946], yaw: -2.45, roll: 0, ring: 3, dusk: 0.8, score: 300, time: 204, fuel: 85, speed: 250, throttle: 0.8, ab: false },
 };
+
+const stagedShot = SHOTS[SHOT];
 
 // ------------------------------------------------------------------ setup
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -96,15 +101,18 @@ let explosion = null;
 const staging = SHOTS[SHOT] !== undefined;
 
 if (staging) {
-  const st = SHOTS[SHOT];
+  const st = stagedShot;
   model.pos.set(st.pos[0], st.pos[1], st.pos[2]);
   model.quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), st.yaw);
   if (st.roll) {
     const qz = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, st.roll, 'YXZ'));
     model.quat.multiply(qz);
   }
-  model.speed = 58;
-  model.throttle = 0.62;
+  model.speed = st.speed ?? 250;
+  model.throttle = st.throttle ?? 0.62;
+  // The HUD's AB badge reads model.afterburner, which update() sets in
+  // live play — but staged shots never run update(), so set it here.
+  model.afterburner = !!st.ab;
   model.fuel = st.fuel;
   rings.index = st.ring;
   rings.passed = st.ring;
@@ -174,7 +182,7 @@ function takeoff() {
   model.state = 'flying';
   model.pos.set(RUNWAY.x - 180, RUNWAY.height + 2, RUNWAY.z);
   model.quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-  model.speed = 45;
+  model.speed = 95; // jet rotation speed
   model.throttle = 0.75;
 }
 
@@ -222,8 +230,10 @@ const _off = new THREE.Vector3();
 const _look = new THREE.Vector3();
 
 function updateCamera(dt) {
-  _off.set(0, 3.4, -19).applyQuaternion(model.quat).add(model.pos);
-  _look.set(0, 1.8, 14).applyQuaternion(model.quat).add(model.pos);
+  // Chase cam, pulled a little further back than the bush plane's: the
+  // jet is longer, so 18 m keeps the whole delta in frame.
+  _off.set(0, 3.8, -18).applyQuaternion(model.quat).add(model.pos);
+  _look.set(0, 2.0, 16).applyQuaternion(model.quat).add(model.pos);
   // Staged shots snap the camera at once: a lerped camera never converges
   // in a slow headless renderer before the screenshot is taken.
   const k = staging ? 1 : 1 - Math.exp(-6 * dt);
@@ -273,6 +283,7 @@ function hudState() {
     throttle: model.throttle,
     fuel: model.fuel,
     damage: model.damage,
+    afterburner: model.afterburner,
     pitch: model.pitchDeg(),
     roll: model.rollDeg(),
     vspeed: model.verticalSpeed,
@@ -281,7 +292,7 @@ function hudState() {
     planeX: model.pos.x,
     planeZ: model.pos.z,
     hint: hintT > 0 && !staging
-      ? 'W/S throttle · ↑↓ pitch · ←→ bank · A/D rudder · R restart · P pause · M mute'
+      ? 'W/S throttle · Shift afterburner · ↑↓ pitch · ←→ bank · A/D rudder · R restart · P pause · M mute'
       : '',
     message, subMessage, messageColor,
   };
@@ -337,7 +348,12 @@ function frame() {
   // Keep the aircraft mesh on the flight model.
   aircraft.group.position.copy(model.pos);
   aircraft.group.quaternion.copy(model.quat);
-  aircraft.spinProp(dt, staging ? 0.6 : model.throttle);
+  // Afterburner: staged shots use their staged flag; live play lights it
+  // past 85% throttle.
+  aircraft.setAfterburner(
+    staging ? !!stagedShot.ab : (model.state === 'flying' && model.throttle > 0.85),
+    dt,
+  );
 
   // Ambient motion: clouds, smoke, ring pulse, label distance.
   sky.update(dt);
