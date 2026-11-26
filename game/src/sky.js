@@ -35,16 +35,60 @@ function glowTexture() {
   return tex;
 }
 
-function cloudTexture() {
+// A real cumulus: a dome of overlapping puffs, tinted bright gold-white
+// on top and warm orange underneath, so the cloud reads as one lit mass
+// instead of a lone soft blob. The tint is painted with source-atop, which
+// keeps the soft alpha falloff of the puffs.
+function cumulusTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const puff = (x, y, r) => {
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+    grad.addColorStop(0.65, 'rgba(255,255,255,0.55)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  };
+  // Wide flat base, domed top.
+  for (const [x, r] of [[30, 42], [80, 46], [130, 48], [180, 46], [226, 40]]) puff(x, 190, r);
+  for (const [x, r] of [[55, 46], [105, 50], [155, 50], [205, 44]]) puff(x, 150, r);
+  for (const [x, r] of [[80, 44], [130, 46], [180, 42]]) puff(x, 110, r);
+  for (const [x, r] of [[105, 38], [150, 38]]) puff(x, 72, r);
+  puff(128, 40, 30);
+  // Sunset tint: bright on top, orange underneath.
+  g.globalCompositeOperation = 'source-atop';
+  const tint = g.createLinearGradient(0, 0, 0, 256);
+  tint.addColorStop(0, 'rgba(255,246,220,1)');
+  tint.addColorStop(0.45, 'rgba(255,217,160,1)');
+  tint.addColorStop(1, 'rgba(255,158,87,1)');
+  g.fillStyle = tint;
+  g.fillRect(0, 0, 256, 256);
+  g.globalCompositeOperation = 'source-over';
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Grey smoke: a loose cluster of soft puffs, denser in the middle.
+function smokeTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d');
-  const grad = g.createRadialGradient(64, 64, 4, 64, 64, 62);
-  grad.addColorStop(0, 'rgba(255,255,255,0.85)');
-  grad.addColorStop(0.7, 'rgba(255,255,255,0.35)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 128, 128);
+  const puff = (x, y, r, a) => {
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(255,255,255,${a})`);
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  };
+  puff(64, 70, 46, 0.85);
+  puff(38, 84, 34, 0.7);
+  puff(90, 84, 34, 0.7);
+  puff(48, 44, 30, 0.7);
+  puff(82, 44, 28, 0.65);
+  puff(64, 30, 24, 0.6);
   return new THREE.CanvasTexture(c);
 }
 
@@ -113,50 +157,62 @@ export function buildSky(scene) {
   glow.name = 'sun-glow';
   group.add(glow);
 
-  // Soft lit clouds: flattened puffs in small clusters.
-  const tex = cloudTexture();
+  // Cumulus banks grouped near the horizon: each bank is a row of
+  // overlapping cumulus sprites that merge into one lit cloud mass, low
+  // over the sea so the sky above the plane stays clean. No lone blob
+  // floats by itself in the middle of the sky.
+  const tex = cumulusTexture();
   const clouds = new THREE.Group();
   clouds.name = 'clouds';
   const cloudMat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, opacity: 0.85, depthWrite: false,
-    color: 0xFFC9A3, fog: false,
+    map: tex, transparent: true, opacity: 0.92, depthWrite: false,
+    color: 0xFFD9A0, fog: false,
   });
   const cloudMat2 = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, opacity: 0.68, depthWrite: false,
-    color: 0xE8A0C0, fog: false,
+    map: tex, transparent: true, opacity: 0.85, depthWrite: false,
+    color: 0xFFE9C9, fog: false,
   });
   let seed = 7;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  for (let c = 0; c < 8; c++) {
-    const a = (c / 8) * Math.PI * 2 + rnd() * 0.5;
-    const r = 1800 + rnd() * 3200;
-    const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+  const bankAzimuths = [0.35, 1.45, 2.55, 3.95, 5.25];
+  for (const az of bankAzimuths) {
+    const r = 4600 + rnd() * 1400;
+    const cx = Math.cos(az) * r, cz = Math.sin(az) * r;
     const cy = 380 + rnd() * 320;
-    const puffs = 3 + Math.floor(rnd() * 3);
+    const puffs = 8 + Math.floor(rnd() * 4);
+    const span = 1100 + rnd() * 700;
     for (let p = 0; p < puffs; p++) {
-      const s = new THREE.Sprite(p < puffs - 1 ? cloudMat : cloudMat2);
-      const w = 420 + rnd() * 420;
-      s.position.set(cx + (rnd() - 0.5) * 700, cy + (rnd() - 0.5) * 90, cz + (rnd() - 0.5) * 260);
-      s.scale.set(w, w * 0.36, 1);
+      // Row along the bank with a domed top: the middle puffs sit higher.
+      const u = (p / (puffs - 1)) * 2 - 1; // -1..1 along the bank
+      const tx = -Math.sin(az), tz = Math.cos(az); // tangent direction
+      const w = 520 + rnd() * 380;
+      const s = new THREE.Sprite(p % 2 ? cloudMat : cloudMat2);
+      s.position.set(
+        cx + tx * u * span / 2 + (rnd() - 0.5) * 120,
+        cy + (1 - u * u) * 110 + (rnd() - 0.5) * 50,
+        cz + tz * u * span / 2 + (rnd() - 0.5) * 120,
+      );
+      s.scale.set(w, w * 0.42, 1);
       clouds.add(s);
     }
   }
   group.add(clouds);
 
-  // Volcano smoke: a slow column of grey puffs over the crater.
+  // Volcano smoke: a slow column of grey puffs over the crater, wider and
+  // darker toward the top so the column reads as rising smoke.
   const smoke = new THREE.Group();
   smoke.name = 'volcano-smoke';
   const smokeMat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, opacity: 0.5, depthWrite: false,
-    color: 0x8D8D9E, fog: false,
+    map: smokeTexture(), transparent: true, opacity: 0.5, depthWrite: false,
+    color: 0x9A9AA8, fog: false,
   });
   const puffs = [];
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 11; i++) {
     const s = new THREE.Sprite(smokeMat);
-    s.userData.baseY = 520 + i * 55;
+    s.userData.baseY = 520 + i * 50;
     s.userData.phase = i * 0.7;
     s.position.set(-1700 + (i % 3 - 1) * 26, s.userData.baseY, -1500 + (i % 2) * 20);
-    const w = 130 + i * 26;
+    const w = 120 + i * 24;
     s.scale.set(w, w * 0.55, 1);
     puffs.push(s);
     smoke.add(s);
