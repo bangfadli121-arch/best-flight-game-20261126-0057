@@ -149,10 +149,19 @@ const C = {
   paddyRipe: new THREE.Color(0xC0CA33),
   paddyDark: new THREE.Color(0x3E7D2E),
   // Flooded terrace (ref 05 Sapa): the water mirrors the SKY, so it is
-  // bright silver-blue, almost white-blue — never dull orange. The
-  // orange "mirror" is what made the hills read as painted blocks.
-  paddyWater: new THREE.Color(0xEAF6FC),
-  paddyWaterDeep: new THREE.Color(0xA8D4E8),
+  // bright silver-blue — a real mirror, not white paint. v13: less
+  // chalk-white than before (0xEAF6FC read as pale blobs from the air),
+  // deeper silver-blue with a directional sheen per plot.
+  paddyWater: new THREE.Color(0xA9CBE8),
+  paddyWaterDeep: new THREE.Color(0x93C6E2),
+  // Crop-field plots among the paddies: wheat gold, field green, plowed
+  // brown — the farmland patchwork that breaks the terrace monotony.
+  fieldWheat: new THREE.Color(0xD9C26A),
+  fieldGreen: new THREE.Color(0x6A9A3A),
+  fieldBrown: new THREE.Color(0x8A6A45),
+  // Dry lowland grass for the plains outside the paddy band.
+  dryGrass: new THREE.Color(0xB8A85C),
+  grassDark: new THREE.Color(0x2F6B33),
   // Young seedlings: saturated fresh green (the old pale green washed
   // out to olive under the warm sunset light).
   paddyYoung: new THREE.Color(0x7CB342),
@@ -195,7 +204,7 @@ function paddyBand(x, z, h) {
   const tb = Math.floor(h / 12);
   const r = Math.sqrt(x * x + z * z);
   const ang = Math.atan2(z, x);
-  const along = (ang * r) / 60; // plots along the contour, ~60 m each
+  const along = (ang * r) / 40; // plots along the contour, ~40 m each — v13: finer ribbons, not 60 m blocks
   const seg = Math.floor(along);
   return {
     tb, seg,
@@ -221,30 +230,47 @@ function terrainColour(x, z, h, slope) {
     // Rice-terrace patchwork (ref 04/05): contour bands, one solid
     // colour each, with dark bund lines on the band edges (the terrace
     // risers) and thin bunds between plots along the contour. Planting
-    // phase per plot: flooded (sky mirror — bright silver-blue),
-    // young seedlings, deep green, golden ripe. Water is three plots
-    // in ten: the mirror plots must sparkle among the green, bright
-    // enough to read as water from the air.
+    // phase per plot: flooded (sky mirror — silver-blue with a
+    // directional sheen), young seedlings, deep green, golden ripe, or
+    // a crop-field plot (wheat / field green / plowed brown). Water is
+    // nearly half the plots: the mirror plots must sparkle among the
+    // green, bright enough to read as water from the air.
     const b = paddyBand(x, z, h);
-    let base;
-    if (b.ph < 0.38) base = C.paddyWater;
+    let base, isWater = false;
+    if (b.ph < 0.45) { base = C.paddyWater; isWater = true; }
     else if (b.ph < 0.63) base = C.paddyYoung;
     else if (b.ph < 0.88) base = C.paddyDark;
-    else base = C.paddyRipe;
+    else if (b.ph < 0.93) base = C.paddyRipe;
+    else {
+      const f = cellHash(b.tb * 31 + 7, b.seg * 17 + 3);
+      base = f < 0.4 ? C.fieldWheat : f < 0.75 ? C.fieldGreen : C.fieldBrown;
+    }
     col.copy(base);
+    // Water sheen: brightness runs along the plot like a sky reflection
+    // (ref 05) instead of one flat pale tone.
+    if (isWater) col.multiplyScalar(0.85 + 0.25 * b.segFrac);
     // Brightness jitter per plot, never per vertex.
     col.multiplyScalar(0.94 + cellHash(b.tb + 911, b.seg + 733) * 0.12);
     // Bund at the band edges (risers): dark brown-gold, hard edge.
     // Thresholds widened for the 1024 px ground texture (~5.9 m/px):
     // a 1-px bund line is what reads as a terrace edge from the air.
-    // v10: stronger contrast (0.85) so the silver water plots are cut
-    // by crisp golden bunds like the Sapa ribbons in ref 05.
+    // v13: wider + stronger gold bunds (0.22/0.5) so the silver water
+    // plots are cut by crisp golden ribbons like the Sapa ribbons in ref 05.
     const edge = Math.min(b.frac, 1 - b.frac);
-    if (edge < 0.16) col.lerp(C.bund, 0.85);
-    else if (edge < 0.34) col.lerp(C.bundGold, 0.35);
-    // Thin bund between plots along the contour.
+    if (edge < 0.22) col.lerp(C.bund, 0.85);
+    else if (edge < 0.34) col.lerp(C.bundGold, 0.5);
+    // Thin bund between plots along the contour — EXCEPT between two
+    // water plots: neighbours of the same phase merge into one long
+    // silver ribbon following the contour (ref 05), instead of a row
+    // of separate white rectangles. The band-edge bunds above still
+    // separate one ribbon from the next.
     const sEdge = Math.min(b.segFrac, 1 - b.segFrac);
-    if (sEdge < 0.08) col.lerp(C.bund, 0.6);
+    if (isWater) {
+      const nL = cellHash(b.tb * 7 + 13, (b.seg - 1) * 13 + 5) < 0.45;
+      const nR = cellHash(b.tb * 7 + 13, (b.seg + 1) * 13 + 5) < 0.45;
+      if (b.segFrac < 0.10 && !nL) col.lerp(C.bund, 0.6);
+      if (b.segFrac > 0.90 && !nR) col.lerp(C.bund, 0.6);
+    } else if (sEdge < 0.10) col.lerp(C.bund, 0.6);
     return col;
   }
   // High ground: the volcano is zoned by height — dense forest on the
@@ -298,6 +324,12 @@ function terrainColour(x, z, h, slope) {
     return col;
   }
   col.copy(C.grassB);
+  // Plains are never one flat green (v13): dry-grass and dark patches
+  // break the lowlands into farmland, so the dataran reads as land.
+  const lb = valueNoise(x * 0.012 + 77, z * 0.012 + 55);
+  if (lb > 0.3) col.lerp(C.dryGrass, 0.45);
+  else if (lb < -0.35) col.lerp(C.grassDark, 0.5);
+  col.multiplyScalar(0.92 + cellHash(Math.floor(x / 24), Math.floor(z / 24)) * 0.16);
   if (h > 200) col.lerp(C.rock, Math.min(1, (h - 200) / 60));
   return col;
 }
@@ -512,6 +544,80 @@ function runwayTexture() {
   return tex;
 }
 
+// Terracotta roof tiles (v13): horizontal tile rows with offset
+// vertical seams, so a roof reads as tiled clay, not flat paint.
+function tileRoofTexture(hex) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = hex;
+  g.fillRect(0, 0, 256, 256);
+  let seed = 5150;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let y = 0; y < 256; y += 16) {
+    g.fillStyle = 'rgba(0,0,0,0.22)';
+    g.fillRect(0, y, 256, 3);
+    g.fillStyle = 'rgba(255,255,255,0.10)';
+    g.fillRect(0, y + 3, 256, 2);
+    const off = (y / 16) % 2 ? 16 : 0;
+    for (let x = off; x < 256; x += 32) {
+      g.fillStyle = 'rgba(0,0,0,0.14)';
+      g.fillRect(x, y, 2, 16);
+    }
+  }
+  for (let i = 0; i < 260; i++) {
+    const v = rnd() > 0.5 ? 255 : 0;
+    g.fillStyle = `rgba(${v},${v},${v},0.05)`;
+    g.fillRect(rnd() * 256, rnd() * 256, 2, 2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 1);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// Plaster wall (v13): warm off-white with soft blotches and a darker
+// base band, so house walls read as plastered, not flat colour.
+function plasterTexture(hex) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = hex;
+  g.fillRect(0, 0, 256, 256);
+  let seed = 8181;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 22; i++) {
+    const x = rnd() * 256, y = rnd() * 256, r = 18 + rnd() * 46;
+    const bg = g.createRadialGradient(x, y, 0, x, y, r);
+    bg.addColorStop(0, rnd() > 0.5 ? 'rgba(120,100,70,0.10)' : 'rgba(255,255,255,0.10)');
+    bg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = bg;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(0.5, 0.5);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// Market awning stripes (v13): red/cream canvas stripes.
+function stripeTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 64;
+  const g = c.getContext('2d');
+  for (let x = 0; x < 128; x += 16) {
+    g.fillStyle = (x / 16) % 2 ? '#F5EFE0' : '#D32F2F';
+    g.fillRect(x, 0, 16, 64);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 // Rounded box: a rounded-rectangle footprint extruded vertically, with
 // bevelled edges all round — the owner's hard rule this round is NO
 // BOXES anywhere ("gua gmau pokok nya ada kotak kotak lgi"). Every
@@ -678,7 +784,7 @@ function buildTreesAndHuts(group) {
   // crown reads as a leafy mass from the air instead of a flat triangle.
   const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 7, 7);
   const blobGeo = new THREE.IcosahedronGeometry(2.9, 1);
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 100; i++) {
     const a = rnd() * Math.PI * 2;
     const r = 180 + rnd() * 620;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
@@ -814,34 +920,40 @@ function buildVillage(group) {
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 
   const wallMats = [
-    new THREE.MeshStandardMaterial({ color: 0xF5EFE0, roughness: 0.9 }),
-    new THREE.MeshStandardMaterial({ color: 0xFAFAF5, roughness: 0.9 }),
-    new THREE.MeshStandardMaterial({ color: 0xF3E5C0, roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ map: plasterTexture('#F5EFE0'), roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ map: plasterTexture('#FAFAF5'), roughness: 0.9 }),
+    new THREE.MeshStandardMaterial({ map: plasterTexture('#F3E5C0'), roughness: 0.9 }),
   ];
   const roofMats = [
-    new THREE.MeshStandardMaterial({ color: 0xB5492A, roughness: 0.85 }),
-    new THREE.MeshStandardMaterial({ color: 0xA63E24, roughness: 0.85 }),
+    new THREE.MeshStandardMaterial({ map: tileRoofTexture('#B5492A'), roughness: 0.85 }),
+    new THREE.MeshStandardMaterial({ map: tileRoofTexture('#A63E24'), roughness: 0.85 }),
     new THREE.MeshStandardMaterial({ color: 0x9AA5A8, roughness: 0.6, metalness: 0.4 }),
   ];
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 0.9 });
   const woodMat = new THREE.MeshStandardMaterial({ color: 0x8D6E63, roughness: 1 });
+  // Lit windows: warm glow at dusk, framed in cream.
+  const litWinMat = new THREE.MeshStandardMaterial({ color: 0xFFD28A, emissive: 0xFF9D2E, emissiveIntensity: 0.9, roughness: 0.4 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xFFF8E1, roughness: 0.85 });
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x8D7B68, roughness: 1 });
 
   // Dirt road: runway west threshold -> village -> beach.
   roadRibbon(vgroup, [[315, 620], [350, 665], [368, 718], [392, 772], [412, 812]], 7, 0x8D6E63);
   // Cross street through the village.
   roadRibbon(vgroup, [[322, 732], [368, 720], [420, 712]], 5, 0x7A5C4E);
 
-  // 20 houses clustered along the roads (deterministic scatter, kept
-  // clear of the road itself and of each other).
+  // 26 houses clustered along the roads (deterministic scatter, kept
+  // clear of the road itself, of each other and of the market stalls).
+  const STALLS = [[340, 728], [385, 712], [408, 724]];
   const spots = [];
   let guard = 0;
-  while (spots.length < 20 && guard++ < 500) {
+  while (spots.length < 26 && guard++ < 600) {
     const a = rnd() * Math.PI * 2;
     const r = 25 + rnd() * 70;
     const x = VILLAGE.x + Math.cos(a) * r;
     const z = VILLAGE.z + Math.sin(a) * r * 0.8;
     if (Math.abs(z - 720) < 12 && x > 320 && x < 425) continue; // keep off the cross street
     if (spots.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < 17)) continue;
+    if (STALLS.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < 13)) continue;
     if (terrainHeight(x, z) < 8) continue;
     spots.push([x, z]);
   }
@@ -852,17 +964,51 @@ function buildVillage(group) {
     const walls = new THREE.Mesh(roundedBoxGeometry(8, 4.5, 6.5, 0.9), wallMats[i % wallMats.length]);
     walls.position.y = 0;
     walls.castShadow = true;
+    // Stone foundation ringing the base, so the house sits on the land.
+    const found = new THREE.Mesh(roundedBoxGeometry(8.5, 0.8, 7.0, 0.4), stoneMat);
+    found.position.y = -0.1;
     const door = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.9), darkMat);
-    door.position.set(0, 1.45, 3.58);
-    const win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.1), darkMat);
-    win1.position.set(-2.5, 2.6, 3.58);
-    const win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.1), darkMat);
-    win2.position.set(2.5, 2.6, 3.58);
-    house.add(walls, door, win1, win2);
+    door.position.set(0, 1.45, 3.60);
+    const frame1 = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.4), frameMat);
+    frame1.position.set(-2.5, 2.6, 3.58);
+    const win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.1), litWinMat);
+    win1.position.set(-2.5, 2.6, 3.61);
+    const frame2 = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.4), frameMat);
+    frame2.position.set(2.5, 2.6, 3.58);
+    const win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.1), litWinMat);
+    win2.position.set(2.5, 2.6, 3.61);
+    house.add(found, walls, door, frame1, win1, frame2, win2);
     gableRoof(house, roofMats[i % roofMats.length], 8, 6.5, 4.5);
     house.position.set(hx, h - 0.2, hz);
     house.rotation.y = rnd() * Math.PI;
     vgroup.add(house);
+  }
+
+  // Market stalls along the cross street: striped awnings over counters.
+  const awnTex = stripeTexture();
+  for (const [sx, sz, ry] of [[340, 728, 0.3], [385, 712, -0.4], [408, 724, 1.1]]) {
+    const sh = terrainHeight(sx, sz);
+    const stall = new THREE.Group();
+    for (const [px, pz] of [[-1.5, -1], [1.5, -1], [-1.5, 1], [1.5, 1]]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 2.6, 6), woodMat);
+      post.position.set(px, 1.3, pz);
+      stall.add(post);
+    }
+    const counter = new THREE.Mesh(roundedBoxGeometry(3.2, 1.0, 2.0, 0.3), woodMat);
+    counter.position.y = 0.5;
+    counter.castShadow = true;
+    stall.add(counter);
+    const awn = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.8, 2.8),
+      new THREE.MeshStandardMaterial({ map: awnTex, roughness: 0.85, side: THREE.DoubleSide }),
+    );
+    awn.rotation.x = -Math.PI / 2 + 0.35;
+    awn.position.y = 2.85;
+    awn.castShadow = true;
+    stall.add(awn);
+    stall.position.set(sx, sh - 0.2, sz);
+    stall.rotation.y = ry;
+    vgroup.add(stall);
   }
 
   // Mosque: white walls, green dome, gold finial, one minaret.
@@ -895,8 +1041,28 @@ function buildVillage(group) {
   );
   mDome.position.set(7.2, 14, 0);
   const mDoor = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.6), darkMat);
-  mDoor.position.set(0, 1.8, 4.58);
+  mDoor.position.set(0, 1.8, 4.60);
   mosque.add(mWalls, dome, finial, minaret, mDome, mDoor);
+  // Gold band around the dome base + arched windows + crescent finial.
+  const goldTrim = new THREE.MeshStandardMaterial({ color: 0xFFD54F, metalness: 0.7, roughness: 0.35 });
+  const band = new THREE.Mesh(new THREE.TorusGeometry(3.4, 0.18, 10, 32), goldTrim);
+  band.rotation.x = Math.PI / 2;
+  band.position.y = 6.0;
+  mosque.add(band);
+  for (const wx of [-3.2, 3.2]) {
+    const fr = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.2), goldTrim);
+    fr.position.set(wx, 2.8, 4.60);
+    const wn = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.9), darkMat);
+    wn.position.set(wx, 2.8, 4.63);
+    mosque.add(fr, wn);
+  }
+  const crescent = new THREE.Mesh(
+    new THREE.TorusGeometry(0.32, 0.07, 8, 16, Math.PI * 1.25),
+    new THREE.MeshStandardMaterial({ color: 0xFFD54F, metalness: 0.8, roughness: 0.3 }),
+  );
+  crescent.position.set(0, 10.5, 0);
+  crescent.rotation.z = -0.4;
+  mosque.add(crescent);
   const mh = terrainHeight(402, 688);
   mosque.position.set(402, mh - 0.2, 688);
   mosque.rotation.y = 0.5;
@@ -928,7 +1094,7 @@ function buildVillage(group) {
   const crownGeo = new THREE.ConeGeometry(3.4, 2.4, 6);
   const palmTrunk = new THREE.MeshStandardMaterial({ color: 0x8D6E63, roughness: 1 });
   const palmCrown = new THREE.MeshStandardMaterial({ color: 0x2E7D32, roughness: 0.9, flatShading: true });
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 28; i++) {
     const a = rnd() * Math.PI * 2;
     const r = 20 + rnd() * 115;
     const x = VILLAGE.x + Math.cos(a) * r;
@@ -951,7 +1117,7 @@ function buildVillage(group) {
   // Banana clumps: bright flattened crowns between the houses.
   const bananaMat = new THREE.MeshStandardMaterial({ color: 0x7CB342, roughness: 0.9, flatShading: true });
   const bananaGeo = new THREE.IcosahedronGeometry(2.4, 0);
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 16; i++) {
     const a = rnd() * Math.PI * 2;
     const r = 30 + rnd() * 90;
     const x = VILLAGE.x + Math.cos(a) * r;
@@ -1008,6 +1174,23 @@ function buildVillage(group) {
     const out2 = out1.clone();
     out2.position.z = -2.6;
     boat.add(hull, bow, out1, out2);
+    // Lateen sail on the first two boats: a white triangle on a mast.
+    if (i < 2) {
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 5, 6), woodMat);
+      mast.position.set(0, 2.8, 0);
+      boat.add(mast);
+      const sailShape = new THREE.Shape();
+      sailShape.moveTo(0, 0);
+      sailShape.lineTo(0, 4.4);
+      sailShape.lineTo(2.4, 0.8);
+      sailShape.closePath();
+      const sail = new THREE.Mesh(
+        new THREE.ShapeGeometry(sailShape),
+        new THREE.MeshStandardMaterial({ color: 0xFFF8E1, roughness: 0.9, side: THREE.DoubleSide }),
+      );
+      sail.position.set(0.1, 0.9, 0);
+      boat.add(sail);
+    }
     boat.position.set(bx, 0.6, bz);
     boat.rotation.y = -0.7 + i * 0.25;
     vgroup.add(boat);
@@ -1125,15 +1308,15 @@ function buildBoulders(group) {
 function buildTerraceMirrors(group) {
   const mat = new THREE.MeshPhongMaterial({
     color: 0xBFE3F2, emissive: 0x1A2E3A, emissiveIntensity: 0.4,
-    specular: 0xFFFFFF, shininess: 300, transparent: true, opacity: 0.8,
+    specular: 0xFFFFFF, shininess: 300, transparent: true, opacity: 0.9,
   });
-  const geo = new THREE.PlaneGeometry(44, 11);
+  const geo = new THREE.PlaneGeometry(48, 13);
   let placed = 0;
-  for (let gx = 0; gx <= 800 && placed < 48; gx += 30) {
-    for (let gz = 0; gz <= 800 && placed < 48; gz += 30) {
+  for (let gx = 0; gx <= 800 && placed < 64; gx += 30) {
+    for (let gz = 0; gz <= 800 && placed < 64; gz += 30) {
       const h = terrainHeight(gx, gz);
       if (h < 10 || h > 120) continue;
-      if (paddyBand(gx, gz, h).ph >= 0.35) continue; // only water-phase plots
+      if (paddyBand(gx, gz, h).ph >= 0.45) continue; // only water-phase plots
       const hx = terrainHeight(gx + 6, gz) - h;
       const hz = terrainHeight(gx, gz + 6) - h;
       const grad = new THREE.Vector3(hx, 0, hz);
