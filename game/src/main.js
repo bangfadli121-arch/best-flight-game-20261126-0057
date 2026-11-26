@@ -20,7 +20,7 @@ const SHOT = Number(params.get('shot') || 0);
 const SHOTS = {
   // Jet cruise at 900 km/h with the burners lit for the cover: gold gate
   // ahead, terraces + village + volcano behind it.
-  1: { pos: [312, 152, 965], yaw: -2.96, roll: 0, ring: 0, dusk: 0.12, score: 0, time: 240, fuel: 100, speed: 250, throttle: 0.95, ab: true },
+  1: { pos: [312, 152, 965], yaw: -2.96, roll: 0, ring: 0, dusk: 0.12, score: 0, time: 240, fuel: 100, speed: 250, throttle: 0.95, ab: true, cam: 0.82, lookY: 0.0 },
   // Shot 2: runway approach from the NORTH-WEST, 260 m out, heading
   // south-east at the low gate. The old head-on pose from the west put
   // the gate edge-on to the camera (the ring faces the previous gate,
@@ -49,7 +49,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.18; // v17: a touch brighter for the AC7 sunlit look
+renderer.toneMappingExposure = 1.22; // v18: brighter for the silver jet
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 // Soft shadows: the sun throws the plane's shadow onto the terrain below.
 renderer.shadowMap.enabled = true;
@@ -87,16 +87,27 @@ scene.add(sunLight.target);
 // warm fill rims the wings, tails and fuselage in orange — the jet
 // reads as a lit Raptor instead of a black blob. Kept at 0.5: it is a
 // rim, not a flood; a flood is what turned the top skin gold in v7.
-const fillLight = new THREE.DirectionalLight(0xFF7A3D, 0.7); // v17: stronger warm rim for the 3/4 flank
+const fillLight = new THREE.DirectionalLight(0xFF7A3D, 0.9); // v18: stronger warm rim
 fillLight.position.set(4000, 1200, 2000);
 scene.add(fillLight);
 // Cool sky fill from above-east: the counterweight to the warm sun.
 // Without it the light-grey top skin has no cool light to answer with
 // and reads gold; with it the top stays grey (ref 02) in the sunset.
-const skyFill = new THREE.DirectionalLight(0xB9CCE8, 0.55);
+const skyFill = new THREE.DirectionalLight(0xB9CCE8, 0.7); // v18: stronger cool top fill — the silver top needs cool light to stay silver, not gold
 skyFill.position.set(2000, 4200, -1500);
 scene.add(skyFill);
-scene.add(new THREE.HemisphereLight(0x93A7C9, 0x1E3A34, 1.3));
+// v18 camera key light: a warm directional that always shines from the
+// chase camera's side onto the jet. The low western sun leaves the rear
+// in shadow from the chase camera on north/east-bound shots (the v17
+// "dark jet": the camera sits on the shadow side, and the chase-fill
+// point light sat below-behind and lit the belly). This light tracks the
+// camera, so the camera-facing flank + top are always lit silver-gold
+// like fadli-15a, whatever the heading. No shadows: it is a fill, not
+// a second sun.
+const camLight = new THREE.DirectionalLight(0xFFD9A8, 1.0);
+scene.add(camLight);
+scene.add(camLight.target);
+scene.add(new THREE.HemisphereLight(0x93A7C9, 0x1E3A34, 1.45));
 
 buildTerrain(scene);
 const aircraft = buildAircraft();
@@ -253,8 +264,16 @@ function updateCamera(dt) {
   // distance, so the jet stays the same size in frame; only the angle
   // changes. Left side because the low western sun lights the left
   // flank on the north/west-bound shots.
-  _off.set(-6.0, 5.0, -16.5).applyQuaternion(model.quat).add(model.pos);
-  _look.set(0, 2.0, 16).applyQuaternion(model.quat).add(model.pos);
+  // v18: the cover shot pulls the camera closer (cam 0.82) so the jet is
+  // big and dominant in frame like the AC7 jet; other shots keep v17.
+  // v18b: cam was 0.72 and the tail/nozzles slid behind the bottom HUD —
+  // 0.82 backs off a touch. lookY 3.2 was tried first and pushed the jet
+  // DOWN (looking higher moves the subject lower); lookY 0.0 looks at
+  // the jet's centreline, lifting the tail clear of the HUD.
+  const camScale = staging && stagedShot.cam ? stagedShot.cam : 1;
+  const lookY = staging && stagedShot.lookY !== undefined ? stagedShot.lookY : 2.0;
+  _off.set(-6.0 * camScale, 5.0 * camScale, -16.5 * camScale).applyQuaternion(model.quat).add(model.pos);
+  _look.set(0, lookY, 16).applyQuaternion(model.quat).add(model.pos);
   // Staged shots snap the camera at once: a lerped camera never converges
   // in a slow headless renderer before the screenshot is taken.
   const k = staging ? 1 : 1 - Math.exp(-6 * dt);
@@ -402,6 +421,11 @@ function frame() {
   sunLight.position.copy(model.pos).addScaledVector(sky.sunDir, 900);
   sunLight.target.position.copy(model.pos);
   sunLight.target.updateMatrixWorld();
+  // v18: camera key light tracks the chase camera, so it always shines
+  // from the camera side onto the jet.
+  camLight.position.copy(camera.position);
+  camLight.target.position.copy(model.pos);
+  camLight.target.updateMatrixWorld();
   hud.draw(hudState());
   renderer.render(scene, camera);
 }
