@@ -258,12 +258,15 @@ function airfoilWingGeometry({ s0, s1, chordRoot, chordTip, thick = 0.10, camber
 function finLoftGeometry() {
   const stations = [
     // [height, chord, chordCentreZ, thicknessRatio]
-    [0.00, 1.50, 0.00, 0.12],
-    [0.55, 1.32, -0.06, 0.12],
-    [1.10, 1.02, -0.14, 0.12],
-    [1.45, 0.82, -0.20, 0.12],
-    [1.75, 0.58, -0.26, 0.12],
-    [2.10, 0.32, -0.32, 0.12],
+    // v20: every height +0.30 — the fin group now sits 0.30 lower
+    // (see tail.position) so the base ring is buried in the fuselage;
+    // the visible fin above the body is unchanged (tip still 2.40).
+    [0.30, 1.50, 0.00, 0.12],
+    [0.85, 1.32, -0.06, 0.12],
+    [1.40, 1.02, -0.14, 0.12],
+    [1.75, 0.82, -0.20, 0.12],
+    [2.05, 0.58, -0.26, 0.12],
+    [2.40, 0.32, -0.32, 0.12],
   ];
   const section = airfoilRing(1, 14); // unit thickness, scaled per station
   const nSec = section.length;
@@ -293,7 +296,7 @@ function finLoftGeometry() {
     cz += positions[(last * nSec + j) * 3 + 2];
   }
   positions.push(cx / nSec, cy / nSec, cz / nSec);
-  uvs.push(0.5, 2.1);
+  uvs.push(0.5, 2.4);
   for (let j = 0; j < nSec; j++) {
     const j2 = (j + 1) % nSec;
     indices.push(last * nSec + j, last * nSec + j2, tipC);
@@ -570,9 +573,12 @@ export function buildAircraft(envTex) {
   // Root chord 3.7 m on a 12.6 m body, span 9.0 m, low-mounted
   // (y -0.18), slight anhedral, root buried in the fuselage so the
   // wing emerges from the body — no joint, no fillet plate.
+  // v20: wing root s0 0.45 -> 0.30 — the v19 lower-trailing root
+  // corner poked ~7 cm outside the fuselage side (33/36 root points
+  // inside); now the whole root ring is buried.
   for (const side of [-1, 1]) {
     const wing = new THREE.Mesh(
-      airfoilWingGeometry({ s0: 0.45, s1: 4.52, chordRoot: 3.7, chordTip: 0.8, thick: 0.13, camber: 0.20, side }),
+      airfoilWingGeometry({ s0: 0.30, s1: 4.52, chordRoot: 3.7, chordTip: 0.8, thick: 0.13, camber: 0.20, side }),
       plainMat,
     );
     wing.position.set(0, -0.18, -0.9);
@@ -625,7 +631,12 @@ export function buildAircraft(envTex) {
   const decalTex = raptorDecalTexture();
   for (const side of [-1, 1]) {
     const tail = new THREE.Group();
-    tail.position.set(side * 0.62, 0.30, -4.3);
+    // v20: was (side*0.62, 0.30) — the base ring floated 0.2-0.3 m
+    // above the fuselage top (0/28 base points inside the body).
+    // Now (side*0.30, -0.30): base ring at fuselage centre height,
+    // buried 0.13+ m inside the body; stations +0.30 keep the visible
+    // fin and tip (2.40) exactly where they were.
+    tail.position.set(side * 0.30, -0.30, -4.3);
     tail.rotation.z = -side * 0.5; // cant outward ~28 deg
     const fin = new THREE.Mesh(finGeo, skinMat);
     tail.add(fin);
@@ -635,7 +646,9 @@ export function buildAircraft(envTex) {
       new THREE.MeshBasicMaterial({ map: decalTex, transparent: true, side: THREE.DoubleSide }),
     );
     decal.userData.noShadow = true;
-    decal.position.set(side * 0.065, 1.1, 0);
+    // v20: fin stations lifted +0.30, so the decal rides +0.60 to stay
+    // on the fin face at the same world height as v19.
+    decal.position.set(side * 0.065, 1.7, 0);
     decal.rotation.y = side * Math.PI / 2;
     tail.add(decal);
     group.add(tail);
@@ -643,14 +656,26 @@ export function buildAircraft(envTex) {
 
   // Stabilators: small all-moving tails, slight anhedral, smooth
   // lofted airfoils like the wings.
+  // v20 (fadli: "sayap blkng ga ke pasang"): the root loft now starts
+  // at s0 = -0.3 — PAST the centreline, so the two stabilators overlap
+  // THROUGH the fuselage and the open root ring sits 0.7+ m inside the
+  // body, never near the surface. Plus a small root fairing (a flat
+  // ellipsoid hugging the fuselage side) that blends the junction into
+  // a smooth fillet — the v19 bare seam read as a dark gap from the
+  // chase camera.
   for (const side of [-1, 1]) {
     const stab = new THREE.Mesh(
-      airfoilWingGeometry({ s0: 0.1, s1: 2.0, chordRoot: 1.2, chordTip: 0.65, thick: 0.12, camber: 0.07, side }),
+      airfoilWingGeometry({ s0: -0.3, s1: 2.0, chordRoot: 1.2, chordTip: 0.65, thick: 0.12, camber: 0.07, side }),
       plainMat,
     );
     stab.position.set(0, -0.05, -5.0);
     stab.rotation.z = -side * 0.07;
     group.add(stab);
+    const fillet = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), plainMat);
+    fillet.scale.set(0.30, 0.09, 0.55);
+    fillet.position.set(side * 0.42, -0.05, -5.0);
+    fillet.name = 'stab-fillet';
+    group.add(fillet);
   }
 
   // Caret intakes v19: NO strapped-on duct (the v17 duct read as a
