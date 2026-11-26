@@ -74,12 +74,20 @@ function islandBump(x, z, isl) {
 
 function runwayFlatten(x, z, h) {
   const rw = RUNWAY;
-  const dx = x - rw.x, dz = z - rw.z;
-  // Runway runs east-west, so the flat shelf is a rectangle in x, narrow in z.
-  const along = Math.abs(dx) / (rw.length / 2 + 60);
-  const across = Math.abs(dz) / (rw.width / 2 + 55);
-  const m = Math.max(0, 1 - Math.max(along, across));
-  const s = smooth(Math.min(1, m));
+  // The strip mesh is a FLAT plane at rw.height, so the shelf under it
+  // must be flat at rw.height too — a plateau, not a hump. The old
+  // blend (s = smooth(1 - max(along, across))) only reached 42 at the
+  // exact centre: measured terrainHeight was 32.7 at x=390, 41.9 at
+  // x=510-530 and 5.3 at x=730, so the flat strip floated up to 37 m
+  // above the ground at its east end, and a landing only registered
+  // near the centre — everywhere else the plane sank below the visible
+  // strip before the physics called it a touchdown. Now s = 1 anywhere
+  // on the strip and fades to the raw terrain over 60 m / 55 m outside
+  // it, so the visible strip, the ground mesh and the physics agree.
+  const overX = Math.max(0, Math.abs(x - rw.x) - rw.length / 2) / 60;
+  const overZ = Math.max(0, Math.abs(z - rw.z) - rw.width / 2) / 55;
+  const outside = Math.max(overX, overZ); // 0 anywhere on the strip
+  const s = smooth(Math.max(0, Math.min(1, 1 - outside)));
   return h + (rw.height - h) * s;
 }
 
@@ -149,13 +157,15 @@ const C = {
   // out to olive under the warm sunset light).
   paddyYoung: new THREE.Color(0x7CB342),
   // Volcano vegetation zones: dense forest floor, dry savanna.
-  forestFloor: new THREE.Color(0x2D5A27),
-  savanna: new THREE.Color(0x9A8C4A),
+  // v10b: lightened — the v10 lower cone read as one dark brown mass
+  // in the dusk light because these bases were too dark.
+  forestFloor: new THREE.Color(0x3E6E33),
+  savanna: new THREE.Color(0xA89A58),
   bund: new THREE.Color(0x5D4037),
   bundGold: new THREE.Color(0xC89B5A),
-  rockDark: new THREE.Color(0x33261F),
-  rock: new THREE.Color(0x5D4A44),
-  ash: new THREE.Color(0x8A7A6E),
+  rockDark: new THREE.Color(0x40332B),
+  rock: new THREE.Color(0x6E5B52),
+  ash: new THREE.Color(0x97887A),
   snow: new THREE.Color(0xF2F4F6),
   volcanoWarm: new THREE.Color(0xC97B4A),
 };
@@ -217,7 +227,7 @@ function terrainColour(x, z, h, slope) {
     // enough to read as water from the air.
     const b = paddyBand(x, z, h);
     let base;
-    if (b.ph < 0.35) base = C.paddyWater;
+    if (b.ph < 0.38) base = C.paddyWater;
     else if (b.ph < 0.63) base = C.paddyYoung;
     else if (b.ph < 0.88) base = C.paddyDark;
     else base = C.paddyRipe;
@@ -227,12 +237,14 @@ function terrainColour(x, z, h, slope) {
     // Bund at the band edges (risers): dark brown-gold, hard edge.
     // Thresholds widened for the 1024 px ground texture (~5.9 m/px):
     // a 1-px bund line is what reads as a terrace edge from the air.
+    // v10: stronger contrast (0.85) so the silver water plots are cut
+    // by crisp golden bunds like the Sapa ribbons in ref 05.
     const edge = Math.min(b.frac, 1 - b.frac);
-    if (edge < 0.16) col.lerp(C.bund, 0.7);
-    else if (edge < 0.34) col.lerp(C.bundGold, 0.28);
+    if (edge < 0.16) col.lerp(C.bund, 0.85);
+    else if (edge < 0.34) col.lerp(C.bundGold, 0.35);
     // Thin bund between plots along the contour.
     const sEdge = Math.min(b.segFrac, 1 - b.segFrac);
-    if (sEdge < 0.08) col.lerp(C.bund, 0.5);
+    if (sEdge < 0.08) col.lerp(C.bund, 0.6);
     return col;
   }
   // High ground: the volcano is zoned by height — dense forest on the
@@ -251,7 +263,7 @@ function terrainColour(x, z, h, slope) {
     const blotch = valueNoise(x * 0.008 + 31, z * 0.008 + 17); // -1..1, ~125 m
     if (h < 190) {
       col.copy(C.forestFloor);
-      col.multiplyScalar(0.60 + 0.65 * gullyLow);
+      col.multiplyScalar(0.72 + 0.60 * gullyLow);
       col.multiplyScalar(0.82 + 0.30 * gullyFine);
       if (blotch > 0.25) col.lerp(C.savanna, 0.55);
       else if (blotch < -0.45) col.lerp(C.rock, 0.45);
@@ -260,7 +272,7 @@ function terrainColour(x, z, h, slope) {
     }
     if (h < 280) {
       col.copy(C.savanna);
-      col.multiplyScalar(0.58 + 0.65 * gullyLow);
+      col.multiplyScalar(0.70 + 0.60 * gullyLow);
       col.multiplyScalar(0.82 + 0.30 * gullyFine);
       if (blotch > 0.25) col.lerp(C.forestFloor, 0.55);
       else if (blotch < -0.45) col.lerp(C.rock, 0.45);
@@ -275,7 +287,7 @@ function terrainColour(x, z, h, slope) {
     const stripe = Math.floor(v.ang * 28 + valueNoise(x * 0.01 + 5, z * 0.01 + 5) * 2.0);
     col.copy(C.ash).lerp(C.rockDark, stripe % 2 === 0 ? 0.15 : 0.85);
     const gully = 0.5 + 0.5 * Math.sin(v.ang * 60 + valueNoise(x * 0.02 + 11, z * 0.02 + 7) * 4.0);
-    col.multiplyScalar(0.75 + 0.35 * gully);
+    col.multiplyScalar(0.82 + 0.30 * gully);
     const rx = (x + 1700) / Math.max(1, v.d), rz = (z + 1500) / Math.max(1, v.d);
     const sunFace = rx * -0.89 + rz * 0.46; // dot with the sun's horizontal dir
     col.multiplyScalar(0.85 + 0.15 * (sunFace * 0.5 + 0.5));
@@ -406,7 +418,7 @@ function seaBumpTexture() {
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(70, 70);
+  tex.repeat.set(90, 90);
   return tex;
 }
 
@@ -424,12 +436,14 @@ function seaColorTexture() {
   let seed = 31337;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   // Fine wave streaks: short thin light/dark dashes, all directions.
-  for (let i = 0; i < 2600; i++) {
+  // v10: many more streaks (4200) at higher alpha so the sea has fine
+  // ripple texture EVERYWHERE (ref 10), not just inside the glitter path.
+  for (let i = 0; i < 4200; i++) {
     const x = rnd() * 512, y = rnd() * 512;
     const a = rnd() * Math.PI;
     const len = 6 + rnd() * 22;
     const light = rnd() > 0.5;
-    g.strokeStyle = light ? `rgba(255,255,255,${0.05 + rnd() * 0.10})` : `rgba(10,40,50,${0.05 + rnd() * 0.10})`;
+    g.strokeStyle = light ? `rgba(255,255,255,${0.07 + rnd() * 0.12})` : `rgba(10,40,50,${0.07 + rnd() * 0.12})`;
     g.lineWidth = 1 + rnd() * 1.5;
     g.beginPath();
     g.moveTo(x, y);
@@ -437,7 +451,7 @@ function seaColorTexture() {
     g.stroke();
   }
   // Warm sky-reflection patches: soft orange-pink blobs at low alpha.
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 40; i++) {
     const x = rnd() * 512, y = rnd() * 512, r = 30 + rnd() * 70;
     const grad = g.createRadialGradient(x, y, 0, x, y, r);
     grad.addColorStop(0, `rgba(255,170,110,${0.10 + rnd() * 0.10})`);
@@ -498,6 +512,32 @@ function runwayTexture() {
   return tex;
 }
 
+// Rounded box: a rounded-rectangle footprint extruded vertically, with
+// bevelled edges all round — the owner's hard rule this round is NO
+// BOXES anywhere ("gua gmau pokok nya ada kotak kotak lgi"). Every
+// house wall, granary, boat hull and pier deck uses this instead of
+// BoxGeometry, so nothing in the scene reads as a cube or a block.
+function roundedBoxGeometry(w, h, d, r) {
+  const s = new THREE.Shape();
+  const x = -w / 2, y = -d / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + d - r);
+  s.quadraticCurveTo(x + w, y + d, x + w - r, y + d);
+  s.lineTo(x + r, y + d);
+  s.quadraticCurveTo(x, y + d, x, y + d - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+  const b = Math.min(0.3, r * 0.5);
+  const geo = new THREE.ExtrudeGeometry(s, {
+    depth: h, bevelEnabled: true, bevelThickness: b, bevelSize: b,
+    bevelSegments: 3, curveSegments: 10,
+  });
+  geo.rotateX(-Math.PI / 2); // extrusion -> +Y, footprint w x d, base y=0
+  return geo;
+}
+
 export function buildTerrain(scene) {
   const group = new THREE.Group();
   group.name = 'terrain';
@@ -549,7 +589,7 @@ export function buildTerrain(scene) {
     new THREE.MeshPhongMaterial({
       map: seaColorTexture(), vertexColors: true, transparent: true, opacity: 0.96,
       shininess: 130, specular: 0xFFC27A, emissive: 0x082A2E,
-      bumpMap: seaBumpTexture(), bumpScale: 1.8,
+      bumpMap: seaBumpTexture(), bumpScale: 2.2,
     }),
   );
   sea.position.y = 0.4;
@@ -593,10 +633,11 @@ function buildRunway(group) {
   }
   // PAPI: four small light boxes beside the western threshold — two red,
   // two white from a correct glidepath — the detail a pilot looks for.
+  // v10: rounded drums, not boxes (no boxy shapes anywhere).
   const papiCols = [0xFF2222, 0xFF2222, 0xFFFFFF, 0xFFFFFF];
   for (let k = 0; k < 4; k++) {
     const box = new THREE.Mesh(
-      new THREE.BoxGeometry(2.2, 1.1, 1.4),
+      new THREE.CylinderGeometry(0.9, 1.0, 1.1, 12),
       new THREE.MeshStandardMaterial({
         color: 0x222222, emissive: papiCols[k], emissiveIntensity: 1.6, roughness: 0.5,
       }),
@@ -671,20 +712,20 @@ function buildTreesAndHuts(group) {
   for (const [hx, hz, ry] of hutSpots) {
     const h = terrainHeight(hx, hz);
     const hut = new THREE.Group();
-    const walls = new THREE.Mesh(new THREE.BoxGeometry(9, 4.5, 7), hutWall);
-    walls.position.y = 2.25;
+    const walls = new THREE.Mesh(roundedBoxGeometry(9, 4.5, 7, 1.0), hutWall);
+    walls.position.y = 0;
     walls.castShadow = true;
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(6.4, 3.4, 4), hutRoof);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(6.4, 3.4, 8), hutRoof);
     roof.position.y = 6.2;
     roof.rotation.y = Math.PI / 4;
     roof.castShadow = true;
     const door = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 3.0), hutDark);
-    door.position.set(0, 1.5, 3.53);
+    door.position.set(0, 1.5, 3.83);
     const win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.2), hutDark);
-    win1.position.set(-2.6, 2.6, 3.53);
+    win1.position.set(-2.6, 2.6, 3.83);
     const win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.2), hutDark);
-    win2.position.set(2.6, 2.6, 3.53);
-    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.4, 0.9), hutDark);
+    win2.position.set(2.6, 2.6, 3.83);
+    const chimney = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, 2.4, 10), hutDark);
     chimney.position.set(2.2, 7.0, -1.2);
     hut.add(walls, roof, door, win1, win2, chimney);
     hut.position.set(hx, h, hz);
@@ -808,15 +849,15 @@ function buildVillage(group) {
     const [hx, hz] = spots[i];
     const h = terrainHeight(hx, hz);
     const house = new THREE.Group();
-    const walls = new THREE.Mesh(new THREE.BoxGeometry(8, 4.5, 6.5), wallMats[i % wallMats.length]);
-    walls.position.y = 2.25;
+    const walls = new THREE.Mesh(roundedBoxGeometry(8, 4.5, 6.5, 0.9), wallMats[i % wallMats.length]);
+    walls.position.y = 0;
     walls.castShadow = true;
     const door = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.9), darkMat);
-    door.position.set(0, 1.45, 3.28);
+    door.position.set(0, 1.45, 3.58);
     const win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.1), darkMat);
-    win1.position.set(-2.5, 2.6, 3.28);
+    win1.position.set(-2.5, 2.6, 3.58);
     const win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.1), darkMat);
-    win2.position.set(2.5, 2.6, 3.28);
+    win2.position.set(2.5, 2.6, 3.58);
     house.add(walls, door, win1, win2);
     gableRoof(house, roofMats[i % roofMats.length], 8, 6.5, 4.5);
     house.position.set(hx, h - 0.2, hz);
@@ -827,10 +868,10 @@ function buildVillage(group) {
   // Mosque: white walls, green dome, gold finial, one minaret.
   const mosque = new THREE.Group();
   const mWalls = new THREE.Mesh(
-    new THREE.BoxGeometry(11, 6, 8.5),
+    roundedBoxGeometry(11, 6, 8.5, 1.0),
     new THREE.MeshStandardMaterial({ color: 0xF8F6EF, roughness: 0.85 }),
   );
-  mWalls.position.y = 3;
+  mWalls.position.y = 0;
   mWalls.castShadow = true;
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(3.4, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2),
@@ -854,7 +895,7 @@ function buildVillage(group) {
   );
   mDome.position.set(7.2, 14, 0);
   const mDoor = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.6), darkMat);
-  mDoor.position.set(0, 1.8, 4.28);
+  mDoor.position.set(0, 1.8, 4.58);
   mosque.add(mWalls, dome, finial, minaret, mDome, mDoor);
   const mh = terrainHeight(402, 688);
   mosque.position.set(402, mh - 0.2, 688);
@@ -870,10 +911,10 @@ function buildVillage(group) {
       post.position.set(px, 1.1, pz);
       gran.add(post);
     }
-    const box = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.8, 3.4), wallMats[0]);
-    box.position.y = 3.6;
+    const box = new THREE.Mesh(roundedBoxGeometry(4.2, 2.8, 3.4, 0.7), wallMats[0]);
+    box.position.y = 2.5;
     box.castShadow = true;
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(3.6, 2.2, 4), roofMats[0]);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(3.6, 2.2, 8), roofMats[0]);
     roof.position.y = 6.1;
     roof.rotation.y = Math.PI / 4;
     gran.add(box, roof);
@@ -950,10 +991,10 @@ function buildVillage(group) {
     const bx = 428 + i * 22, bz = 858 + i * 18;
     const boat = new THREE.Group();
     const hull = new THREE.Mesh(
-      new THREE.BoxGeometry(6.5, 1.1, 2.2),
+      roundedBoxGeometry(6.5, 1.1, 2.2, 0.45),
       new THREE.MeshStandardMaterial({ color: boatCols[i], roughness: 0.7 }),
     );
-    hull.position.y = 0.4;
+    hull.position.y = 0.05;
     const bow = new THREE.Mesh(
       new THREE.ConeGeometry(1.1, 2.4, 4),
       new THREE.MeshStandardMaterial({ color: boatCols[i], roughness: 0.7 }),
@@ -971,10 +1012,10 @@ function buildVillage(group) {
     boat.rotation.y = -0.7 + i * 0.25;
     vgroup.add(boat);
   }
-  // Pier: planks from the beach out to the boats.
+  // Pier: planks from the beach out to the boats (rounded slab, no box).
   const pier = new THREE.Group();
   const pierLen = 58;
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.3, pierLen), woodMat);
+  const deck = new THREE.Mesh(roundedBoxGeometry(2.6, 0.3, pierLen, 0.15), woodMat);
   deck.position.y = 1.1;
   pier.add(deck);
   for (let d = -pierLen / 2 + 4; d <= pierLen / 2 - 4; d += 12) {
@@ -1008,13 +1049,16 @@ function buildVolcanoForest(group) {
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const cx = -1700, cz = -1500;
   let placed = 0;
-  for (let i = 0; i < 260 && placed < 80; i++) {
+  // v10: more trees (130), wider band down to the foot (h 20-280) and
+  // more size variation — the lower cone must read as forest canopy,
+  // not painted green (ref 06).
+  for (let i = 0; i < 380 && placed < 130; i++) {
     const a = rnd() * Math.PI * 2;
-    const r = 400 + rnd() * 260;
+    const r = 380 + rnd() * 300;
     const x = cx + Math.cos(a) * r;
     const z = cz + Math.sin(a) * r;
     const h = terrainHeight(x, z);
-    if (h < 30 || h > 260) continue;
+    if (h < 20 || h > 280) continue;
     const tree = new THREE.Group();
     const trunk = new THREE.Mesh(trunkGeo, trunkMat);
     trunk.position.y = 3.5;
@@ -1030,7 +1074,7 @@ function buildVolcanoForest(group) {
     }
     tree.position.set(x, h - 0.3, z);
     tree.rotation.y = rnd() * Math.PI;
-    tree.scale.setScalar(1.2 + rnd() * 0.8);
+    tree.scale.setScalar(1.0 + rnd() * 1.3);
     group.add(tree);
     placed++;
   }
@@ -1085,8 +1129,8 @@ function buildTerraceMirrors(group) {
   });
   const geo = new THREE.PlaneGeometry(44, 11);
   let placed = 0;
-  for (let gx = 0; gx <= 800 && placed < 36; gx += 30) {
-    for (let gz = 0; gz <= 800 && placed < 36; gz += 30) {
+  for (let gx = 0; gx <= 800 && placed < 48; gx += 30) {
+    for (let gz = 0; gz <= 800 && placed < 48; gz += 30) {
       const h = terrainHeight(gx, gz);
       if (h < 10 || h > 120) continue;
       if (paddyBand(gx, gz, h).ph >= 0.35) continue; // only water-phase plots
