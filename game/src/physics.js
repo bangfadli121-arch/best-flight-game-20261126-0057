@@ -6,9 +6,9 @@
 import * as THREE from 'three';
 import { terrainHeight, isOverRunway, RUNWAY } from './terrain.js';
 
-export const MIN_FLY_SPEED = 26;   // m/s: below this the wing gives up
-export const MAX_SPEED = 96;       // m/s at full throttle, level flight
-export const CRUISE_SPEED = 58;    // m/s the plane settles toward
+export const MIN_FLY_SPEED = 70;   // m/s: below this the jet gives up (~250 km/h)
+export const MAX_SPEED = 330;      // m/s at full throttle, level flight (~1190 km/h)
+export const CRUISE_SPEED = 250;   // m/s the jet settles toward (~900 km/h)
 
 const _euler = new THREE.Euler();
 const _dq = new THREE.Quaternion();
@@ -26,7 +26,7 @@ export class FlightModel {
     this.quat = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(0, 1, 0), Math.atan2(-200, -600),
     );
-    this.speed = 58;
+    this.speed = 250;
     this.throttle = 0.62;
     this.fuel = 100;      // percent
     this.damage = 0;      // percent; 100 = wrecked
@@ -34,6 +34,7 @@ export class FlightModel {
     this.crashReason = '';
     this.verticalSpeed = 0;
     this.gForce = 1;
+    this.afterburner = false; // throttle past 85%: AB flames on, fuel burns faster
   }
 
   /** Current forward direction (local +Z through the orientation). */
@@ -69,7 +70,9 @@ export class FlightModel {
     // --- throttle & fuel -------------------------------------------------
     if (this.fuel <= 0) this.throttle = 0;
     else this.throttle = Math.max(0, Math.min(1, this.throttle + input.throttle * dt * 0.55));
-    this.fuel = Math.max(0, this.fuel - dt * (0.16 + this.throttle * 0.85));
+    // Afterburner past 85% throttle: speed, but fuel burns ~2.5x faster.
+    this.afterburner = this.throttle > 0.85 && this.fuel > 0;
+    this.fuel = Math.max(0, this.fuel - dt * (0.16 + this.throttle * 0.85 + (this.afterburner ? 1.4 : 0)));
 
     // --- speed: thrust pulls toward a throttle-set target, climb bleeds it
     const target = 20 + this.throttle * (MAX_SPEED - 20);
@@ -80,15 +83,18 @@ export class FlightModel {
 
     // --- attitude: pitch / roll / coordinated turn -----------------------
     // Bank angle drives the turn (coordinated): right wing down turns right.
+    // A jet keeps the same turn radius at any speed, so the yaw rate grows
+    // with speed instead of capping out — otherwise at 300 m/s the course
+    // would be unthreadable.
     const rollRad = this.rollDeg() * Math.PI / 180;
-    const agility = 0.45 + Math.min(1, this.speed / 70) * 0.55;
+    const agility = 0.5 + Math.min(1, this.speed / 250) * 0.5;
     const pitchRate = input.pitch * 0.6 * agility;
     let rollRate = input.roll * 1.0 * agility;
     // Do not keep rolling past ~66 degrees of bank.
     if (input.roll !== 0 && Math.sign(input.roll) === Math.sign(rollRad) && Math.abs(rollRad) > 1.15) {
       rollRate *= 0.1;
     }
-    const yawRate = -Math.sin(rollRad) * 0.55 * Math.min(1, this.speed / 55)
+    const yawRate = -Math.sin(rollRad) * Math.max(0.45, this.speed / 200)
       + input.yaw * 0.3 * agility;
     _euler.set(pitchRate * dt, yawRate * dt, -rollRate * dt, 'YXZ');
     _dq.setFromEuler(_euler);
@@ -130,12 +136,13 @@ export class FlightModel {
     const clearance = this.pos.y - ground;
     if (clearance < 1.6) {
       const onRunway = isOverRunway(this.pos.x, this.pos.z);
-      const gentle = Math.abs(this.verticalSpeed) < 6 && this.speed < 58
+      // A jet lands hot: ~100 m/s on the strip, gentle sink, wings level.
+      const gentle = Math.abs(this.verticalSpeed) < 8 && this.speed < 100
         && Math.abs(this.pitchDeg()) < 12 && Math.abs(this.rollDeg()) < 20;
       if (onRunway && gentle && this.state === 'flying') {
         this.pos.y = RUNWAY.height + 1.6;
         this.state = 'landed';
-      } else if (Math.abs(this.verticalSpeed) < 9 && this.speed < 48) {
+      } else if (Math.abs(this.verticalSpeed) < 9 && this.speed < 140) {
         // A hard scrape: damage and a bounce, not yet a wreck. The bounce
         // kicks the nose up so a quick pilot can climb away from it.
         this.damage += 30;
