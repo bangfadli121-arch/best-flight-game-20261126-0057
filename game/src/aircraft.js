@@ -53,9 +53,9 @@ function panelTexture() {
   c.width = c.height = 512;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, '#AEB6BF');
-  grad.addColorStop(0.5, '#9AA3AD');
-  grad.addColorStop(1, '#8E97A1');
+  grad.addColorStop(0, '#9AA3AD');
+  grad.addColorStop(0.5, '#8B939D');
+  grad.addColorStop(1, '#7E868F');
   g.fillStyle = grad;
   g.fillRect(0, 0, 512, 512);
   // Soft weathering blotches, darker and lighter grey.
@@ -71,7 +71,7 @@ function panelTexture() {
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
   }
   // Panel lines: chordwise stations + spanwise seams, thin and dark.
-  g.strokeStyle = 'rgba(84,92,102,0.6)';
+  g.strokeStyle = 'rgba(70,78,88,0.8)';
   g.lineWidth = 2;
   for (const y of [64, 150, 248, 348, 436]) {
     g.beginPath(); g.moveTo(20, y); g.lineTo(492, y); g.stroke();
@@ -161,10 +161,14 @@ export function buildAircraft() {
   // slab — bright top skin with panel lines, mid-grey sides, darker
   // belly, gold canopy. The old single dark tone is what read as a
   // black blob from the chase camera.
-  const stealth = new THREE.MeshStandardMaterial({ color: 0x6E7680, metalness: 0.6, roughness: 0.42 });
-  const stealthTop = new THREE.MeshStandardMaterial({ map: panelTexture(), color: 0xB9C9DA, metalness: 0.55, roughness: 0.38 });
+  // v8: metalness DOWN (0.55 -> 0.30). High metalness mirrors the warm
+  // sun straight into the camera and turns the whole top gold — that
+  // was the v7 defect. Lower metalness + lighter, cooler tint keeps
+  // the top grey under the sunset; the warm rim comes from the lights.
+  const stealth = new THREE.MeshStandardMaterial({ color: 0x6E7680, metalness: 0.45, roughness: 0.42 });
+  const stealthTop = new THREE.MeshStandardMaterial({ map: panelTexture(), color: 0xC9D2DC, metalness: 0.30, roughness: 0.50 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x3A4048, metalness: 0.6, roughness: 0.45 });
-  const spineMat = new THREE.MeshStandardMaterial({ color: 0x7E858F, metalness: 0.6, roughness: 0.4 });
+  const spineMat = new THREE.MeshStandardMaterial({ color: 0x7E858F, metalness: 0.4, roughness: 0.4 });
   const nozzleMat = new THREE.MeshStandardMaterial({ color: 0x2A2E33, metalness: 0.85, roughness: 0.35 });
   const nozzleRingMat = new THREE.MeshStandardMaterial({ color: 0x9AA0A8, metalness: 0.9, roughness: 0.3 });
   const emberTex = emberTexture();
@@ -297,6 +301,9 @@ export function buildAircraft() {
   // Afterburner: layered flames behind each nozzle (orange shell, yellow
   // core, blue root) plus a warm point light. The flame groups scale in
   // Z so the flame grows out of the nozzle instead of sliding.
+  // v8: flames SHORTER (4.2 -> 2.8 m) and smaller — in v7 the two giant
+  // yellow cones covered the whole rear of the jet. Ref 08's flame is
+  // a compact layered glow inside the nozzle, not a fireball.
   const glowTex = glowTexture();
   const flames = [];
   const abLight = new THREE.PointLight(0xFF8033, 0, 60, 1.5);
@@ -305,10 +312,10 @@ export function buildAircraft() {
   for (const side of [-1, 1]) {
     const fg = new THREE.Group();
     fg.position.set(side * 0.8, -0.05, -5.35);
-    fg.add(flameCone(0xFF7A18, 0.42, 4.2, 0.55));
-    fg.add(flameCone(0xFFD75E, 0.24, 2.8, 0.85));
-    fg.add(flameCone(0x66CCFF, 0.12, 1.5, 0.7));
-    fg.add(flameCone(0xFFF6D8, 0.09, 0.9, 0.9)); // white-hot core
+    fg.add(flameCone(0xFF7A18, 0.34, 2.8, 0.42));
+    fg.add(flameCone(0xFFD75E, 0.20, 2.0, 0.7));
+    fg.add(flameCone(0x66CCFF, 0.10, 1.1, 0.6));
+    fg.add(flameCone(0xFFF6D8, 0.08, 0.7, 0.8)); // white-hot core
     fg.scale.set(0.001, 0.001, 0.001);
     fg.visible = false;
     group.add(fg);
@@ -318,7 +325,7 @@ export function buildAircraft() {
       map: glowTex, color: 0xFF8033, transparent: true, opacity: 0.25,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
-    glare.scale.setScalar(1.6);
+    glare.scale.setScalar(1.2);
     glare.position.set(side * 0.8, -0.05, -5.4);
     group.add(glare);
     flames.push(glare);
@@ -406,10 +413,10 @@ export function buildAircraft() {
         fg.scale.set(w, w, Math.max(0.02, abLevel));
         const glare = flames[i * 2 + 1];
         glare.visible = true;
-        glare.material.opacity = 0.25 + 0.65 * abLevel;
-        glare.scale.setScalar(1.6 + 1.4 * abLevel);
+        glare.material.opacity = 0.18 + 0.5 * abLevel;
+        glare.scale.setScalar(1.2 + 0.8 * abLevel);
       }
-      abLight.intensity = 80 * abLevel;
+      abLight.intensity = 50 * abLevel;
       emberMat.color.setHex(0xFFFFFF); // full gradient while burning
     },
   };
