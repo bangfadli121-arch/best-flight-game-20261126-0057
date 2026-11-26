@@ -16,7 +16,7 @@ export const COURSE = [
   { x: -1400, y: 310, z: -1100, r: 17 },
   { x: -600, y: 190, z: -1600, r: 15 },
   { x: 400,  y: 140, z: -900, r: 15 },
-  { x: 520,  y: 62,  z: 620,  r: 14 }, // low gate over the runway
+  { x: 520,  y: 62,  z: 620,  r: 18 }, // low gate over the runway (wide, so it reads from the air)
   { x: 1100, y: 170, z: 300,  r: 15 },
 ];
 
@@ -92,12 +92,13 @@ export class RingCourse {
     this.labelSprite = this.makeLabelSprite('RING 1');
     this.group.add(this.labelSprite);
 
-    // Warm glow behind the gold gate so it reads at a glance.
+    // Warm glow behind the gold gate so it reads at a glance, even at
+    // 200 m: a wide halo, not a pinprick.
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({
       map: this.makeGlowTexture(), color: 0xFFB300, transparent: true,
-      opacity: 0.55, depthWrite: false,
+      opacity: 0.65, depthWrite: false,
     }));
-    this.glow.scale.set(90, 90, 1);
+    this.glow.scale.set(130, 130, 1);
     this.group.add(this.glow);
 
     scene.add(this.group);
@@ -121,7 +122,7 @@ export class RingCourse {
     const tex = ringLabelTexture(text);
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(46, 8.6, 1);
+    sprite.scale.set(56, 10.5, 1);
     return sprite;
   }
 
