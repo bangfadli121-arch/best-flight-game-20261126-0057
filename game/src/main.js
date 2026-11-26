@@ -19,9 +19,18 @@ const SHOT = Number(params.get('shot') || 0);
 // so the composition is exactly the one the maker chose.
 const SHOTS = {
   1: { pos: [312, 152, 965], yaw: -2.96, roll: 0, ring: 0, dusk: 0.12, score: 0, time: 240, fuel: 100 },
-  2: { pos: [300, 95, 620], yaw: Math.PI / 2, roll: 0, ring: 6, dusk: 0.15, score: 600, time: 198, fuel: 78 },
+  // Shot 2: close (120 m) and aimed 12° left of the gate, so the gold
+  // ring sits fully visible in the lower-right of the frame instead of
+  // hiding behind the fuselage. (Aiming straight at a 200 m gate puts
+  // the gate exactly behind the plane — the plane is far wider in frame
+  // than the gate at that range.) Ring 6 (520, 62, 620) on the runway
+  // strip, sea beyond.
+  2: { pos: [505, 90, 500], yaw: -0.086, roll: 0, ring: 6, dusk: 0.15, score: 600, time: 198, fuel: 78 },
   3: { pos: [-500, 215, -200], yaw: -Math.PI / 2, roll: -0.61, ring: 1, dusk: 0.25, score: 100, time: 228, fuel: 92 },
-  4: { pos: [-800, 275, -300], yaw: -2.50, roll: 0, ring: 3, dusk: 0.8, score: 300, time: 204, fuel: 85 },
+  // Shot 4: 200 m from ring 3 (-1400, 310, -1100) down its course leg,
+  // instead of 1000 m away — the gold gate is full-size in frame with
+  // the snowy volcano cone right behind it.
+  4: { pos: [-1272, 305, -946], yaw: -2.45, roll: 0, ring: 3, dusk: 0.8, score: 300, time: 204, fuel: 85 },
 };
 
 // ------------------------------------------------------------------ setup
