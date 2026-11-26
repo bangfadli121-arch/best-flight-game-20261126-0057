@@ -19,14 +19,18 @@ const SHOT = Number(params.get('shot') || 0);
 // so the composition is exactly the one the maker chose.
 const SHOTS = {
   1: { pos: [312, 152, 965], yaw: -2.96, roll: 0, ring: 0, dusk: 0.12, score: 0, time: 240, fuel: 100 },
-  // Shot 2: runway approach from the west, 220 m out and 33 m above the
-  // strip, heading due east at the low gate. The gate sits ahead in the
-  // sky (its label 14 m above eye level, so it clears the horizon) with
-  // the runway leading to it — the plane is below and behind the gate,
-  // never inside it. The label used to sit exactly on the horizon line
-  // and get cut by the sea; this pose lifts it clear into the sky.
-  2: { pos: [300, 75, 620], yaw: Math.PI / 2, roll: 0, ring: 6, dusk: 0.15, score: 600, time: 198, fuel: 78 },
-  3: { pos: [-500, 215, -200], yaw: -Math.PI / 2, roll: -0.61, ring: 1, dusk: 0.25, score: 100, time: 228, fuel: 92 },
+  // Shot 2: runway approach from the NORTH-WEST, 260 m out, heading
+  // south-east at the low gate. The old head-on pose from the west put
+  // the gate edge-on to the camera (the ring faces the previous gate,
+  // north), so only its label showed. From the north-west the gold ring
+  // reads as a glowing ellipse ahead of the plane, the runway leads to
+  // it, and the village sits left of the strip — the label stays in the
+  // sky, the plane stays below and behind the gate, never inside it.
+  2: { pos: [350, 80, 820], yaw: 2.44, roll: 0, ring: 6, dusk: 0.15, score: 600, time: 198, fuel: 78 },
+  // Shot 3: banking turn toward the sun, yawed a touch south of due west
+  // so the sea glint sits left of centre instead of straight down the
+  // middle of the frame.
+  3: { pos: [-500, 215, -200], yaw: -1.45, roll: -0.61, ring: 1, dusk: 0.25, score: 100, time: 228, fuel: 92 },
   // Shot 4: 200 m from ring 3 (-1400, 310, -1100) down its course leg,
   // instead of 1000 m away — the gold gate is full-size in frame with
   // the snowy volcano cone right behind it.
