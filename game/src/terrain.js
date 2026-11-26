@@ -169,6 +169,85 @@ function terrainColour(x, z, h, slope) {
 }
 
 // ------------------------------------------------------------------ build
+// Fine-grain detail texture, tiled over the whole heightfield: it
+// multiplies the crisp per-cell vertex colours with grass/dirt grain, so
+// the ground reads as textured terrain instead of flat colour. Mostly
+// white so the paddy patchwork keeps its own colours.
+function detailTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#F2F2EC';
+  g.fillRect(0, 0, 256, 256);
+  let seed = 1234567;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 5200; i++) {
+    const v = 0.82 + rnd() * 0.18;
+    const warm = rnd() > 0.72;
+    g.fillStyle = warm
+      ? `rgba(150,120,70,${0.10 + rnd() * 0.14})`
+      : `rgba(${Math.floor(70 * v)},${Math.floor(95 * v)},${Math.floor(60 * v)},${0.08 + rnd() * 0.12})`;
+    const s = 1 + rnd() * 2.2;
+    g.fillRect(rnd() * 256, rnd() * 256, s, s);
+  }
+  // Short grass-blade strokes.
+  g.strokeStyle = 'rgba(60,90,50,0.16)';
+  g.lineWidth = 1;
+  for (let i = 0; i < 700; i++) {
+    const x = rnd() * 256, y = rnd() * 256;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + (rnd() - 0.5) * 3, y - 2 - rnd() * 3);
+    g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(250, 250);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// Runway surface: asphalt grain, centreline dashes, threshold bars and
+// the "27" / "09" numbers, painted once on a canvas and laid on the strip.
+function runwayTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#2B2F36';
+  g.fillRect(0, 0, 1024, 128);
+  let seed = 424242;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let i = 0; i < 2600; i++) {
+    const v = 30 + rnd() * 45;
+    g.fillStyle = `rgba(${v},${v + 3},${v + 8},${0.25 + rnd() * 0.3})`;
+    g.fillRect(rnd() * 1024, rnd() * 128, 1 + rnd() * 2, 1 + rnd() * 2);
+  }
+  // Edge lines.
+  g.fillStyle = '#F5F5F5';
+  g.fillRect(0, 6, 1024, 3);
+  g.fillRect(0, 119, 1024, 3);
+  // Centreline dashes.
+  for (let x = 150; x < 880; x += 62) g.fillRect(x, 62, 34, 4);
+  // Threshold bars at both ends.
+  for (const x0 of [28, 930]) {
+    for (let k = 0; k < 4; k++) g.fillRect(x0, 22 + k * 24, 56, 10);
+  }
+  // Runway numbers.
+  g.font = 'bold 44px system-ui, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('27', 118, 64);
+  g.save();
+  g.translate(906, 64); g.rotate(Math.PI);
+  g.fillText('09', 0, 0);
+  g.restore();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
 export function buildTerrain(scene) {
   const group = new THREE.Group();
   group.name = 'terrain';
@@ -197,12 +276,14 @@ export function buildTerrain(scene) {
   geo.computeVertexNormals();
   const ground = new THREE.Mesh(
     geo,
-    new THREE.MeshLambertMaterial({ vertexColors: true }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, map: detailTexture(), roughness: 0.95, metalness: 0 }),
   );
   ground.name = 'ground';
+  ground.receiveShadow = true;
   group.add(ground);
 
   // Sea: a wide disc, turquoise near the islands, deep teal far out.
+  // Phong specular gives the sun a bright glint path across the water.
   const seaGeo = new THREE.CircleGeometry(9500, 64);
   seaGeo.rotateX(-Math.PI / 2);
   const spos = seaGeo.attributes.position;
@@ -216,7 +297,7 @@ export function buildTerrain(scene) {
   seaGeo.setAttribute('color', new THREE.BufferAttribute(seaCols, 3));
   const sea = new THREE.Mesh(
     seaGeo,
-    new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.96 }),
+    new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, opacity: 0.96, shininess: 130, specular: 0xFFC98A }),
   );
   sea.position.y = 0.4;
   sea.name = 'sea';
@@ -231,32 +312,17 @@ export function buildTerrain(scene) {
 
 function buildRunway(group) {
   const rw = RUNWAY;
+  // Textured strip: asphalt grain, centreline, threshold bars, numbers.
   const strip = new THREE.Mesh(
     new THREE.PlaneGeometry(rw.length, rw.width),
-    new THREE.MeshLambertMaterial({ color: 0x2B2F36 }),
+    new THREE.MeshStandardMaterial({ map: runwayTexture(), roughness: 0.92, metalness: 0 }),
   );
   strip.rotation.x = -Math.PI / 2;
   strip.position.set(rw.x, rw.height + 0.35, rw.z);
   strip.name = 'runway-strip';
+  strip.receiveShadow = true;
   group.add(strip);
 
-  // Centreline dashes.
-  const dashMat = new THREE.MeshBasicMaterial({ color: 0xF5F5F5 });
-  for (let d = -rw.length / 2 + 30; d < rw.length / 2 - 20; d += 40) {
-    const dash = new THREE.Mesh(new THREE.PlaneGeometry(18, 1.6), dashMat);
-    dash.rotation.x = -Math.PI / 2;
-    dash.position.set(rw.x + d, rw.height + 0.45, rw.z);
-    group.add(dash);
-  }
-  // Threshold bars at both ends.
-  for (const end of [-1, 1]) {
-    for (let k = -2; k <= 2; k++) {
-      const bar = new THREE.Mesh(new THREE.PlaneGeometry(14, 2.2), dashMat);
-      bar.rotation.x = -Math.PI / 2;
-      bar.position.set(rw.x + end * (rw.length / 2 - 14), rw.height + 0.45, rw.z + k * 4.4);
-      group.add(bar);
-    }
-  }
   // Edge lights: warm dots along both sides.
   const lightGeo = new THREE.SphereGeometry(0.9, 8, 6);
   const lightMat = new THREE.MeshBasicMaterial({ color: 0xFFB300 });
@@ -267,36 +333,78 @@ function buildRunway(group) {
       group.add(lamp);
     }
   }
+  // PAPI: four small light boxes beside the western threshold — two red,
+  // two white from a correct glidepath — the detail a pilot looks for.
+  const papiCols = [0xFF2222, 0xFF2222, 0xFFFFFF, 0xFFFFFF];
+  for (let k = 0; k < 4; k++) {
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(2.2, 1.1, 1.4),
+      new THREE.MeshStandardMaterial({
+        color: 0x222222, emissive: papiCols[k], emissiveIntensity: 1.6, roughness: 0.5,
+      }),
+    );
+    box.position.set(rw.x - rw.length / 2 + 26, rw.height + 1.2, rw.z + rw.width / 2 + 12 + k * 4.5);
+    group.add(box);
+  }
+  // Windsock beside the runway: orange cone on a pole, tilted by the wind.
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.18, 9, 6),
+    new THREE.MeshStandardMaterial({ color: 0xDDDDDD, roughness: 0.5, metalness: 0.6 }),
+  );
+  pole.position.set(rw.x + 120, rw.height + 4.5, rw.z - rw.width / 2 - 14);
+  group.add(pole);
+  const sock = new THREE.Mesh(
+    new THREE.ConeGeometry(1.1, 4.2, 10, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0xFF7043, roughness: 0.7, side: THREE.DoubleSide }),
+  );
+  sock.rotation.z = Math.PI / 2 - 0.5;
+  sock.position.set(rw.x + 122.5, rw.height + 9.2, rw.z - rw.width / 2 - 14);
+  group.add(sock);
 }
 
 function buildTreesAndHuts(group) {
-  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6D4C41 });
-  const leafMat = new THREE.MeshLambertMaterial({ color: 0x2E7D32 });
-  const leafMat2 = new THREE.MeshLambertMaterial({ color: 0x43A047 });
-  const hutWall = new THREE.MeshLambertMaterial({ color: 0xD7CCC8 });
-  const hutRoof = new THREE.MeshLambertMaterial({ color: 0x8D6E63 });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6D4C41, roughness: 0.95 });
+  const leafMats = [
+    new THREE.MeshStandardMaterial({ color: 0x2E7D32, roughness: 0.9, flatShading: true }),
+    new THREE.MeshStandardMaterial({ color: 0x43A047, roughness: 0.9, flatShading: true }),
+    new THREE.MeshStandardMaterial({ color: 0x66BB6A, roughness: 0.9, flatShading: true }),
+  ];
+  const hutWall = new THREE.MeshStandardMaterial({ color: 0xD7CCC8, roughness: 0.9 });
+  const hutRoof = new THREE.MeshStandardMaterial({ color: 0x8D6E63, roughness: 0.85, flatShading: true });
+  const hutDark = new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 0.9 });
   let seed = 11;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 
-  // Palm-ish trees scattered on the main island's low slopes.
-  for (let i = 0; i < 46; i++) {
+  // Real trees: a trunk plus three overlapping foliage volumes, so the
+  // crown reads as a leafy mass from the air instead of a flat triangle.
+  const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 7, 7);
+  const blobGeo = new THREE.IcosahedronGeometry(2.9, 1);
+  for (let i = 0; i < 70; i++) {
     const a = rnd() * Math.PI * 2;
     const r = 180 + rnd() * 620;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     const h = terrainHeight(x, z);
     if (h < 8 || h > 110 || isOverRunway(x, z)) continue;
     const tree = new THREE.Group();
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 7, 6), trunkMat);
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
     trunk.position.y = 3.5;
-    const crown = new THREE.Mesh(new THREE.ConeGeometry(3.4, 6.5, 7), i % 2 ? leafMat : leafMat2);
-    crown.position.y = 9.5;
-    tree.add(trunk, crown);
+    trunk.castShadow = true;
+    tree.add(trunk);
+    const mat = leafMats[i % leafMats.length];
+    const blobs = [[0, 9.2, 0, 1], [-1.7, 7.6, 0.6, 0.72], [1.6, 7.8, -0.5, 0.75]];
+    for (const [bx, by, bz, bs] of blobs) {
+      const b = new THREE.Mesh(blobGeo, mat);
+      b.position.set(bx, by, bz);
+      b.scale.setScalar(bs);
+      b.castShadow = true;
+      tree.add(b);
+    }
     tree.position.set(x, h - 0.3, z);
     tree.rotation.y = rnd() * Math.PI;
     tree.scale.setScalar(1.25 + rnd() * 0.9);
     group.add(tree);
   }
-  // A few huts beside the runway.
+  // A few huts beside the runway, with doors, windows and a chimney.
   const hutSpots = [
     [RUNWAY.x - 150, RUNWAY.z + 55, 0.4],
     [RUNWAY.x - 120, RUNWAY.z - 58, -0.3],
@@ -307,10 +415,20 @@ function buildTreesAndHuts(group) {
     const hut = new THREE.Group();
     const walls = new THREE.Mesh(new THREE.BoxGeometry(9, 4.5, 7), hutWall);
     walls.position.y = 2.25;
+    walls.castShadow = true;
     const roof = new THREE.Mesh(new THREE.ConeGeometry(6.4, 3.4, 4), hutRoof);
     roof.position.y = 6.2;
     roof.rotation.y = Math.PI / 4;
-    hut.add(walls, roof);
+    roof.castShadow = true;
+    const door = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 3.0), hutDark);
+    door.position.set(0, 1.5, 3.53);
+    const win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.2), hutDark);
+    win1.position.set(-2.6, 2.6, 3.53);
+    const win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.2), hutDark);
+    win2.position.set(2.6, 2.6, 3.53);
+    const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.4, 0.9), hutDark);
+    chimney.position.set(2.2, 7.0, -1.2);
+    hut.add(walls, roof, door, win1, win2, chimney);
     hut.position.set(hx, h, hz);
     hut.rotation.y = ry;
     group.add(hut);
