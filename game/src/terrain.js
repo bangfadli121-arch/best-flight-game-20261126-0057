@@ -241,13 +241,29 @@ function terrainColour(x, z, h, slope) {
   // high-frequency speckle so it reads as gravel, not paint.
   const v = volcanoInfo(x, z);
   if (v.d < 780) {
+    // Erosion gullies run the WHOLE cone (ref 06), not just the rock
+    // zone: the v8 lower cone was one flat brown mass because forest and
+    // savanna had no striping at all. Same 28-sector angular striping
+    // as the rock zone, plus medium blotches so the slope has green,
+    // dry and rocky patches all the way to the foot.
+    const gullyLow = 0.5 + 0.5 * Math.sin(v.ang * 28 + valueNoise(x * 0.01 + 5, z * 0.01 + 5) * 2.0);
+    const gullyFine = 0.5 + 0.5 * Math.sin(v.ang * 60 + valueNoise(x * 0.02 + 11, z * 0.02 + 7) * 4.0);
+    const blotch = valueNoise(x * 0.008 + 31, z * 0.008 + 17); // -1..1, ~125 m
     if (h < 190) {
       col.copy(C.forestFloor);
+      col.multiplyScalar(0.60 + 0.65 * gullyLow);
+      col.multiplyScalar(0.82 + 0.30 * gullyFine);
+      if (blotch > 0.25) col.lerp(C.savanna, 0.55);
+      else if (blotch < -0.45) col.lerp(C.rock, 0.45);
       col.multiplyScalar(0.9 + cellHash(Math.floor(x / 18.75), Math.floor(z / 18.75)) * 0.2);
       return col;
     }
     if (h < 280) {
       col.copy(C.savanna);
+      col.multiplyScalar(0.58 + 0.65 * gullyLow);
+      col.multiplyScalar(0.82 + 0.30 * gullyFine);
+      if (blotch > 0.25) col.lerp(C.forestFloor, 0.55);
+      else if (blotch < -0.45) col.lerp(C.rock, 0.45);
       col.multiplyScalar(0.9 + cellHash(Math.floor(x / 18.75) + 5, Math.floor(z / 18.75)) * 0.2);
       return col;
     }
@@ -313,7 +329,7 @@ function groundTexture() {
       // Fine grain: two-octave value noise + dark/light specks, so no
       // patch is ever one flat tone at close range.
       const n = valueNoise(x * 0.35, z * 0.35) * 0.6 + valueNoise(x * 1.4 + 50, z * 1.4 + 50) * 0.4;
-      let m = 1 + n * 0.07;
+      let m = 1 + n * 0.09;
       const sp = hash2(Math.floor(x * 0.9), Math.floor(z * 0.9));
       if (sp > 0.95) m *= 0.82;
       else if (sp < 0.03) m *= 1.08;
@@ -374,9 +390,71 @@ function seaBumpTexture() {
     g.fillStyle = `rgba(${v},${v},${v},0.8)`;
     g.fillRect(rnd() * 256, rnd() * 256, 1.5, 1.5);
   }
+  // Medium directional ripples: short strokes so the bump has facets
+  // at the scale the camera sees from 500-1000 m, not just micro-grain.
+  for (let i = 0; i < 700; i++) {
+    const x = rnd() * 256, y = rnd() * 256;
+    const a = rnd() * Math.PI;
+    const len = 8 + rnd() * 18;
+    const v = 70 + Math.floor(rnd() * 120);
+    g.strokeStyle = `rgba(${v},${v},${v},0.35)`;
+    g.lineWidth = 1.5 + rnd() * 2;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+    g.stroke();
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(70, 70);
+  return tex;
+}
+
+// Sea colour texture (ref 10): the sea is never one flat tone — fine
+// wave streaks everywhere plus soft warm patches where the sunset sky
+// reflects. Painted near-white so it MULTIPLIES the vertex-colour
+// gradient instead of replacing it; the turquoise-to-teal base still
+// comes from the vertex colours.
+function seaColorTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = '#FFFFFF';
+  g.fillRect(0, 0, 512, 512);
+  let seed = 31337;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  // Fine wave streaks: short thin light/dark dashes, all directions.
+  for (let i = 0; i < 2600; i++) {
+    const x = rnd() * 512, y = rnd() * 512;
+    const a = rnd() * Math.PI;
+    const len = 6 + rnd() * 22;
+    const light = rnd() > 0.5;
+    g.strokeStyle = light ? `rgba(255,255,255,${0.05 + rnd() * 0.10})` : `rgba(10,40,50,${0.05 + rnd() * 0.10})`;
+    g.lineWidth = 1 + rnd() * 1.5;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+    g.stroke();
+  }
+  // Warm sky-reflection patches: soft orange-pink blobs at low alpha.
+  for (let i = 0; i < 26; i++) {
+    const x = rnd() * 512, y = rnd() * 512, r = 30 + rnd() * 70;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(255,170,110,${0.10 + rnd() * 0.10})`);
+    grad.addColorStop(1, 'rgba(255,170,110,0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  // Fine speckle.
+  for (let i = 0; i < 1800; i++) {
+    const v = rnd() > 0.5 ? 255 : 30;
+    g.fillStyle = `rgba(${v},${v},${v},0.08)`;
+    g.fillRect(rnd() * 512, rnd() * 512, 1.5, 1.5);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(24, 24);
+  tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
@@ -460,17 +538,18 @@ export function buildTerrain(scene) {
     const x = spos.getX(i), z = spos.getZ(i);
     const r = Math.sqrt(x * x + z * z) / 9500;
     tmp.copy(near).lerp(far, Math.min(1, r * 1.4));
-    // Fine streak variation (ref 10): the sea is never one flat tone.
-    tmp.multiplyScalar(0.96 + valueNoise(x * 0.02, z * 0.02) * 0.15);
+    // Fine streak variation (ref 10): the sea is never one flat tone —
+    // two octaves now, so there are large soft patches as well as streaks.
+    tmp.multiplyScalar(0.94 + valueNoise(x * 0.02, z * 0.02) * 0.12 + valueNoise(x * 0.008 + 40, z * 0.008 + 40) * 0.10);
     seaCols[i * 3] = tmp.r; seaCols[i * 3 + 1] = tmp.g; seaCols[i * 3 + 2] = tmp.b;
   }
   seaGeo.setAttribute('color', new THREE.BufferAttribute(seaCols, 3));
   const sea = new THREE.Mesh(
     seaGeo,
     new THREE.MeshPhongMaterial({
-      vertexColors: true, transparent: true, opacity: 0.96,
+      map: seaColorTexture(), vertexColors: true, transparent: true, opacity: 0.96,
       shininess: 130, specular: 0xFFC27A, emissive: 0x082A2E,
-      bumpMap: seaBumpTexture(), bumpScale: 1.2,
+      bumpMap: seaBumpTexture(), bumpScale: 1.8,
     }),
   );
   sea.position.y = 0.4;
@@ -929,13 +1008,13 @@ function buildVolcanoForest(group) {
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const cx = -1700, cz = -1500;
   let placed = 0;
-  for (let i = 0; i < 90 && placed < 28; i++) {
+  for (let i = 0; i < 260 && placed < 80; i++) {
     const a = rnd() * Math.PI * 2;
-    const r = 430 + rnd() * 210;
+    const r = 400 + rnd() * 260;
     const x = cx + Math.cos(a) * r;
     const z = cz + Math.sin(a) * r;
     const h = terrainHeight(x, z);
-    if (h < 50 || h > 210) continue;
+    if (h < 30 || h > 260) continue;
     const tree = new THREE.Group();
     const trunk = new THREE.Mesh(trunkGeo, trunkMat);
     trunk.position.y = 3.5;
@@ -974,11 +1053,11 @@ function buildBoulders(group) {
   let placed = 0;
   for (let i = 0; i < 300 && placed < COUNT; i++) {
     const a = rnd() * Math.PI * 2;
-    const r = 150 + rnd() * 210;
+    const r = 60 + rnd() * 400;
     const x = -1700 + Math.cos(a) * r;
     const z = -1500 + Math.sin(a) * r;
     const h = terrainHeight(x, z);
-    if (h < 280 || h > 480) continue;
+    if (h < 200 || h > 480) continue;
     e.set(rnd() * Math.PI, rnd() * Math.PI, rnd() * Math.PI);
     q.setFromEuler(e);
     const sc = 0.6 + rnd() * 1.6;
