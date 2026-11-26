@@ -96,21 +96,72 @@ scene.add(fillLight);
 const skyFill = new THREE.DirectionalLight(0xB9CCE8, 0.7); // v18: stronger cool top fill — the silver top needs cool light to stay silver, not gold
 skyFill.position.set(2000, 4200, -1500);
 scene.add(skyFill);
-// v18 camera key light: a warm directional that always shines from the
+// v19 camera key light: a warm directional that always shines from the
 // chase camera's side onto the jet. The low western sun leaves the rear
 // in shadow from the chase camera on north/east-bound shots (the v17
 // "dark jet": the camera sits on the shadow side, and the chase-fill
 // point light sat below-behind and lit the belly). This light tracks the
 // camera, so the camera-facing flank + top are always lit silver-gold
 // like fadli-15a, whatever the heading. No shadows: it is a fill, not
-// a second sun.
-const camLight = new THREE.DirectionalLight(0xFFD9A8, 1.0);
+// a second sun. v19: 0.85 (was 1.0) — the v18 banking flank blew out
+// to near-white under the old level.
+const camLight = new THREE.DirectionalLight(0xFFD9A8, 0.85);
 scene.add(camLight);
 scene.add(camLight.target);
 scene.add(new THREE.HemisphereLight(0x93A7C9, 0x1E3A34, 1.45));
 
 buildTerrain(scene);
-const aircraft = buildAircraft();
+// v19: procedural sunset ENVIRONMENT MAP for the jet's metal. Baked once
+// from a tiny dedicated scene (gradient sky + sun disc + dark sea) —
+// no external assets, fully offline. The aircraft's standard materials
+// use it as envMap, so the silver skin REFLECTS the sunset instead of
+// rendering as flat matte white (the v18 "cardboard" defect: metalness
+// with nothing to reflect has no tonal variation). The env is applied
+// per-material on the aircraft only — terrain, rings and sky are
+// untouched.
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene();
+{
+  const envSky = new THREE.Mesh(
+    new THREE.SphereGeometry(100, 32, 16),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false,
+      vertexShader: `
+        varying vec3 vDir;
+        void main() {
+          vDir = normalize(position);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec3 vDir;
+        void main() {
+          float h = clamp(vDir.y, -1.0, 1.0);
+          vec3 below = vec3(0.05, 0.16, 0.20);
+          vec3 hor = vec3(1.0, 0.45, 0.16);
+          // v19b: desaturated mid/top — the purple mid (0.45,0.16,0.45)
+          // tinted the whole jet lavender-pink; a grey-mauve mid keeps
+          // the metal SILVER-grey with a warm sunset sheen (fadli-15b).
+          vec3 mid = vec3(0.32, 0.20, 0.38);
+          vec3 top = vec3(0.10, 0.14, 0.28);
+          vec3 col = h < 0.0 ? mix(hor, below, clamp(-h * 3.0, 0.0, 1.0))
+                             : mix(hor, mid, smoothstep(0.0, 0.35, h));
+          col = mix(col, top, smoothstep(0.35, 1.0, h));
+          gl_FragColor = vec4(col, 1.0);
+        }`,
+    }),
+  );
+  envScene.add(envSky);
+  const envSun = new THREE.Mesh(
+    new THREE.CircleGeometry(18, 24),
+    new THREE.MeshBasicMaterial({ color: 0xFFE8B0 }),
+  );
+  envSun.position.copy(sky.sunDir).multiplyScalar(90);
+  envSun.lookAt(0, 0, 0);
+  envScene.add(envSun);
+}
+const envTex = pmrem.fromScene(envScene, 0.04, 0.1, 200).texture;
+pmrem.dispose();
+const aircraft = buildAircraft(envTex);
 scene.add(aircraft.group);
 const model = new FlightModel();
 const rings = new RingCourse(scene);
