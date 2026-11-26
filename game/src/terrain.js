@@ -149,11 +149,12 @@ const C = {
   paddyRipe: new THREE.Color(0xC0CA33),
   paddyDark: new THREE.Color(0x3E7D2E),
   // Flooded terrace (ref 05 Sapa): the water mirrors the SKY, so it is
-  // bright silver-blue — a real mirror, not white paint. v13: less
-  // chalk-white than before (0xEAF6FC read as pale blobs from the air),
-  // deeper silver-blue with a directional sheen per plot.
-  paddyWater: new THREE.Color(0xA9CBE8),
-  paddyWaterDeep: new THREE.Color(0x93C6E2),
+  // bright silver-blue — a real mirror, not white paint. v14: deeper,
+  // more saturated sky blue (0x8FC4EE) so the water reads as WATER from
+  // the air at a glance, not pale grey — the v13 water was too pale and
+  // blended into the bunds at screenshot distance.
+  paddyWater: new THREE.Color(0x8FC4EE),
+  paddyWaterDeep: new THREE.Color(0x7FB8E6),
   // Crop-field plots among the paddies: wheat gold, field green, plowed
   // brown — the farmland patchwork that breaks the terrace monotony.
   fieldWheat: new THREE.Color(0xD9C26A),
@@ -194,22 +195,26 @@ function volcanoInfo(x, z) {
 }
 
 // Terrace bands that FOLLOW THE CONTOUR (ref 04/05): the pattern key is
-// the stepped height, not a square grid — a band is one 8 m height step,
+// the stepped height, not a square grid — a band is one 20 m height step,
 // so its edges are the contour lines themselves and curve with the
 // hillside the way real terraces do. Along the contour the band is cut
-// into ~45 m plots (polar angle * radius), so plots are small, numerous
-// and curved, never a chessboard. Shared by the colour map and by the
-// mirror quads so water plots and mirrors agree on where the water is.
+// into ~90 m plots (polar angle * radius), so plots are wide, numerous
+// and curved, never a chessboard. v14: bands 12 -> 20 m and plots
+// 40 -> 90 m — the v13 plots were too small to read from the air at
+// screenshot distance, so the terraces blurred into blobs; wider bands
+// and plots read as terrace ribbons at a glance. Shared by the colour
+// map and by the mirror quads so water plots and mirrors agree on
+// where the water is.
 function paddyBand(x, z, h) {
-  const tb = Math.floor(h / 12);
+  const tb = Math.floor(h / 20);
   const r = Math.sqrt(x * x + z * z);
   const ang = Math.atan2(z, x);
-  const along = (ang * r) / 40; // plots along the contour, ~40 m each — v13: finer ribbons, not 60 m blocks
+  const along = (ang * r) / 90; // plots along the contour, ~90 m each — v14: wide ribbons
   const seg = Math.floor(along);
   return {
     tb, seg,
     ph: cellHash(tb * 7 + 13, seg * 3 + 5),
-    frac: (h - tb * 12) / 12,        // 0..1 across the band (riser at the edges)
+    frac: (h - tb * 20) / 20,        // 0..1 across the band (riser at the edges)
     segFrac: along - seg,            // 0..1 along the contour within a plot
   };
 }
@@ -254,11 +259,13 @@ function terrainColour(x, z, h, slope) {
     // Bund at the band edges (risers): dark brown-gold, hard edge.
     // Thresholds widened for the 1024 px ground texture (~5.9 m/px):
     // a 1-px bund line is what reads as a terrace edge from the air.
-    // v13: wider + stronger gold bunds (0.22/0.5) so the silver water
-    // plots are cut by crisp golden ribbons like the Sapa ribbons in ref 05.
+    // v14: wider + stronger gold bunds (0.32/0.46, gold lerp 0.65) so
+    // the silver water plots are cut by crisp golden ribbons like the
+    // Sapa ribbons in ref 05 — the v13 bunds were too thin to read at
+    // screenshot distance.
     const edge = Math.min(b.frac, 1 - b.frac);
-    if (edge < 0.22) col.lerp(C.bund, 0.85);
-    else if (edge < 0.34) col.lerp(C.bundGold, 0.5);
+    if (edge < 0.32) col.lerp(C.bund, 0.85);
+    else if (edge < 0.46) col.lerp(C.bundGold, 0.65);
     // Thin bund between plots along the contour — EXCEPT between two
     // water plots: neighbours of the same phase merge into one long
     // silver ribbon following the contour (ref 05), instead of a row
@@ -268,9 +275,9 @@ function terrainColour(x, z, h, slope) {
     if (isWater) {
       const nL = cellHash(b.tb * 7 + 13, (b.seg - 1) * 13 + 5) < 0.45;
       const nR = cellHash(b.tb * 7 + 13, (b.seg + 1) * 13 + 5) < 0.45;
-      if (b.segFrac < 0.10 && !nL) col.lerp(C.bund, 0.6);
-      if (b.segFrac > 0.90 && !nR) col.lerp(C.bund, 0.6);
-    } else if (sEdge < 0.10) col.lerp(C.bund, 0.6);
+      if (b.segFrac < 0.08 && !nL) col.lerp(C.bund, 0.6);
+      if (b.segFrac > 0.92 && !nR) col.lerp(C.bund, 0.6);
+    } else if (sEdge < 0.08) col.lerp(C.bund, 0.6);
     return col;
   }
   // High ground: the volcano is zoned by height — dense forest on the
@@ -925,14 +932,17 @@ function buildVillage(group) {
     new THREE.MeshStandardMaterial({ map: plasterTexture('#F3E5C0'), roughness: 0.9 }),
   ];
   const roofMats = [
-    new THREE.MeshStandardMaterial({ map: tileRoofTexture('#B5492A'), roughness: 0.85 }),
-    new THREE.MeshStandardMaterial({ map: tileRoofTexture('#A63E24'), roughness: 0.85 }),
+    // v14: more saturated terracotta so the roofs read as RED from the
+    // air at a glance — the v13 roofs were too muted to pick out.
+    new THREE.MeshStandardMaterial({ map: tileRoofTexture('#C23E1E'), roughness: 0.85 }),
+    new THREE.MeshStandardMaterial({ map: tileRoofTexture('#B03318'), roughness: 0.85 }),
     new THREE.MeshStandardMaterial({ color: 0x9AA5A8, roughness: 0.6, metalness: 0.4 }),
   ];
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x3E2723, roughness: 0.9 });
   const woodMat = new THREE.MeshStandardMaterial({ color: 0x8D6E63, roughness: 1 });
-  // Lit windows: warm glow at dusk, framed in cream.
-  const litWinMat = new THREE.MeshStandardMaterial({ color: 0xFFD28A, emissive: 0xFF9D2E, emissiveIntensity: 0.9, roughness: 0.4 });
+  // Lit windows: warm glow at dusk, framed in cream. v14: brighter
+  // (emissive 1.4) so the village reads as inhabited at a glance.
+  const litWinMat = new THREE.MeshStandardMaterial({ color: 0xFFD28A, emissive: 0xFF9D2E, emissiveIntensity: 1.4, roughness: 0.4 });
   const frameMat = new THREE.MeshStandardMaterial({ color: 0xFFF8E1, roughness: 0.85 });
   const stoneMat = new THREE.MeshStandardMaterial({ color: 0x8D7B68, roughness: 1 });
 
@@ -941,18 +951,21 @@ function buildVillage(group) {
   // Cross street through the village.
   roadRibbon(vgroup, [[322, 732], [368, 720], [420, 712]], 5, 0x7A5C4E);
 
-  // 26 houses clustered along the roads (deterministic scatter, kept
+  // 28 houses clustered along the roads (deterministic scatter, kept
   // clear of the road itself, of each other and of the market stalls).
+  // v14: houses are scaled 1.55x and spread wider (r 25-95, spacing 24)
+  // — the v13 houses were 8 m wide at 150-300 m distance, so they read
+  // as specks; at ~12.5 m wide they read as a village at a glance.
   const STALLS = [[340, 728], [385, 712], [408, 724]];
   const spots = [];
   let guard = 0;
-  while (spots.length < 26 && guard++ < 600) {
+  while (spots.length < 28 && guard++ < 800) {
     const a = rnd() * Math.PI * 2;
     const r = 25 + rnd() * 70;
     const x = VILLAGE.x + Math.cos(a) * r;
     const z = VILLAGE.z + Math.sin(a) * r * 0.8;
     if (Math.abs(z - 720) < 12 && x > 320 && x < 425) continue; // keep off the cross street
-    if (spots.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < 17)) continue;
+    if (spots.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < 24)) continue;
     if (STALLS.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < 13)) continue;
     if (terrainHeight(x, z) < 8) continue;
     spots.push([x, z]);
@@ -981,6 +994,7 @@ function buildVillage(group) {
     gableRoof(house, roofMats[i % roofMats.length], 8, 6.5, 4.5);
     house.position.set(hx, h - 0.2, hz);
     house.rotation.y = rnd() * Math.PI;
+    house.scale.setScalar(1.55); // v14: bigger houses, read at a glance
     vgroup.add(house);
   }
 
@@ -1066,6 +1080,7 @@ function buildVillage(group) {
   const mh = terrainHeight(402, 688);
   mosque.position.set(402, mh - 0.2, 688);
   mosque.rotation.y = 0.5;
+  mosque.scale.setScalar(1.45); // v14: bigger landmark, reads at a glance
   vgroup.add(mosque);
 
   // Rice granaries on stilts.
@@ -1086,6 +1101,7 @@ function buildVillage(group) {
     gran.add(box, roof);
     gran.position.set(gx, gh - 0.2, gz);
     gran.rotation.y = rnd() * Math.PI;
+    gran.scale.setScalar(1.3); // v14: bigger granaries
     vgroup.add(gran);
   }
 
@@ -1310,10 +1326,10 @@ function buildTerraceMirrors(group) {
     color: 0xBFE3F2, emissive: 0x1A2E3A, emissiveIntensity: 0.4,
     specular: 0xFFFFFF, shininess: 300, transparent: true, opacity: 0.9,
   });
-  const geo = new THREE.PlaneGeometry(48, 13);
+  const geo = new THREE.PlaneGeometry(72, 18);
   let placed = 0;
-  for (let gx = 0; gx <= 800 && placed < 64; gx += 30) {
-    for (let gz = 0; gz <= 800 && placed < 64; gz += 30) {
+  for (let gx = 0; gx <= 800 && placed < 56; gx += 40) {
+    for (let gz = 0; gz <= 800 && placed < 56; gz += 40) {
       const h = terrainHeight(gx, gz);
       if (h < 10 || h > 120) continue;
       if (paddyBand(gx, gz, h).ph >= 0.45) continue; // only water-phase plots
