@@ -98,33 +98,73 @@ const C = {
   paddyA: new THREE.Color(0x7CB342),
   paddyB: new THREE.Color(0xAED581),
   paddyC: new THREE.Color(0x558B2F),
+  paddyRipe: new THREE.Color(0xC0CA33),
+  paddyDark: new THREE.Color(0x33691E),
+  bund: new THREE.Color(0x5D4037),
+  rockDark: new THREE.Color(0x4E342E),
   rock: new THREE.Color(0x6D4C41),
-  ash: new THREE.Color(0x4E342E),
+  ash: new THREE.Color(0x6D4C41),
   snow: new THREE.Color(0xF2F4F6),
 };
 
+// Deterministic hash of one paddy cell, so a cell keeps one flat colour.
+function cellHash(cx, cz) {
+  let n = (cx * 374761393 + cz * 668265263) | 0;
+  n = (n ^ (n >> 13)) | 0;
+  n = Math.imul(n, 1274126177);
+  return (((n ^ (n >> 16)) >>> 0) % 10000) / 10000;
+}
+
+// Distance + bearing from the volcano crater, for the flank striping.
+function volcanoInfo(x, z) {
+  const dx = x + 1700, dz = z + 1500;
+  return { d: Math.sqrt(dx * dx + dz * dz), ang: Math.atan2(dz, dx) };
+}
+
+// Colours are FLAT per patch: every vertex inside one paddy cell gets the
+// cell's colour, with no per-vertex noise lerp — that lerp was what made
+// the hills read as blurry gradients from the air. Edges are hard: a
+// vertex exactly on a cell border is darkened as a bund line, and the
+// grass/rock and ash/snow transitions are steps, not blends.
 function terrainColour(x, z, h, slope) {
-  const n = valueNoise(x * 0.02 + 7, z * 0.02 + 3);
-  const n2 = valueNoise(x * 0.006 + 31, z * 0.006 + 17);
   const col = new THREE.Color();
   if (h < 4) {
     col.copy(C.sand).lerp(C.sandWet, Math.min(1, (4 - h) / 4));
-  } else if (h < 150) {
-    // Rice-terrace bands: height steps alternate greens, broken up by noise.
-    const band = Math.floor(h / 9 + n * 0.5);
-    const base = (band % 3 === 0) ? C.paddyA : (band % 3 === 1) ? C.paddyB : C.paddyC;
-    col.copy(base).lerp(C.grassA, Math.max(0, n2) * 0.22);
-    if (slope > 0.7) col.lerp(C.rock, 0.35);
-  } else if (h < 300) {
-    col.copy(C.grassB).lerp(C.rock, Math.min(1, (h - 150) / 150) * 0.85);
-  } else if (h < 330) {
-    col.copy(C.ash);
-  } else {
-    col.copy(C.ash).lerp(C.snow, Math.min(1, (h - 330) / 50));
+    return col;
   }
-  // Gentle brightness variation so the ground reads as patches, not flat paint.
-  const shade = 1.0 + 0.1 * n;
-  col.multiplyScalar(shade);
+  if (h < 150) {
+    if (slope > 0.62) { col.copy(C.rock); return col; }
+    // Rice-terrace patchwork: 75 m square cells, one solid colour each,
+    // dark bund lines on the cell borders. 75 is a multiple of the 18.75 m
+    // vertex spacing, so borders land exactly on vertices.
+    const CELL = 75;
+    const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+    const pal = [C.paddyA, C.paddyB, C.paddyC, C.paddyRipe, C.paddyDark];
+    const ch = cellHash(cx, cz);
+    col.copy(pal[Math.floor(ch * pal.length)]);
+    // Brightness jitter per cell, never per vertex.
+    col.multiplyScalar(0.95 + cellHash(cx + 911, cz + 733) * 0.1);
+    const fx = (((x % CELL) + CELL) % CELL);
+    const fz = (((z % CELL) + CELL) % CELL);
+    const edge = Math.min(fx, CELL - fx, fz, CELL - fz);
+    if (edge < 7) col.lerp(C.bund, 0.55);
+    if (slope > 0.45) col.lerp(C.rock, (slope - 0.45) / 0.17);
+    return col;
+  }
+  // High ground: the volcano gets radial lava gullies (hard ash / dark-rock
+  // stripes around the crater) and a snow cap with a noise-jittered but
+  // hard edge; other high slopes step from grass to rock.
+  const v = volcanoInfo(x, z);
+  if (v.d < 780) {
+    const stripe = Math.floor(v.ang * 9 + valueNoise(x * 0.01 + 5, z * 0.01 + 5) * 2.2);
+    col.copy(stripe % 2 === 0 ? C.ash : C.rockDark);
+    const snowline = 380 + valueNoise(x * 0.008 + 13, z * 0.008 + 29) * 45;
+    if (h > snowline) col.copy(C.snow);
+    col.multiplyScalar(0.94 + cellHash(Math.floor(v.ang * 9), 3) * 0.1);
+    return col;
+  }
+  col.copy(C.grassB);
+  if (h > 200) col.lerp(C.rock, Math.min(1, (h - 200) / 60));
   return col;
 }
 
@@ -133,8 +173,10 @@ export function buildTerrain(scene) {
   const group = new THREE.Group();
   group.name = 'terrain';
 
-  // Heightfield mesh, 200 x 200 segments over the world square.
-  const SEG = 200;
+  // Heightfield mesh, 320 x 320 segments over the world square: 18.75 m
+  // per vertex, so the paddy patchwork below lands on crisp cell edges
+  // instead of smearing across 30 m triangles.
+  const SEG = 320;
   const geo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, SEG, SEG);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
