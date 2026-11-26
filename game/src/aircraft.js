@@ -1,11 +1,13 @@
-// aircraft.js — the F-22 RAPTOR, built to look built, nose toward +Z.
-// One job: the visible jet model, its twin nozzles and the afterburner
-// flames. The airframe is a VOLUMETRIC fuselage (a chined loft with a
-// pointed nose, side intakes and a long bubble canopy) with a separate
-// blended delta wing — the wing is ONE part of the jet, not the whole
-// jet. From the chase camera the silhouette reads at once: tall body,
-// nose, intakes, canopy, canted twin tails, two nozzles — a Raptor, not
-// a flat triangle.
+// aircraft.js — the F-22 RAPTOR, rebuilt from scratch (v14) to the real
+// jet's proportions. The v13 jet went wrong in the other direction:
+// fat body, giant slab tails, headlight nozzles — it read as a chunky
+// toy, not a Raptor. This one is measured off the real F-22 (ref 02/01):
+// length 18.9 m, span 13.56 m — LONG and SLEEK, body narrow, tails tall
+// but SLIM, nozzles modest. Model scale 12.6 m long, 9.0 m span, body
+// 1.34 m wide: length/span 1.40, like the real jet (1.39). Nose toward
+// +Z. From the chase camera the silhouette reads at once: long diamond
+// body, gold bubble canopy, blended delta, slim canted tails, two small
+// nozzles — a Raptor, not a toy.
 
 import * as THREE from 'three';
 
@@ -44,53 +46,52 @@ function raptorDecalTexture() {
   return tex;
 }
 
-// Top-skin texture (ref 02): light silver-grey with BOLD dark panel
-// lines, access panels, rivets and weathering blotches. The v8 lines
-// were too thin to read on the banking shot — these are darker, thicker
-// and more numerous, so the top skin reads as a built airframe from
-// the chase camera instead of a blank pale slab.
+// Top-skin texture (ref 02): panel mosaic on a MID-grey base. The v13
+// skin was too pale and too glossy — under the low sun on the banking
+// shot it washed out to white-gold. This base is a full stop darker
+// (#7C848E instead of #9AA3AD), the multiply colour is darker too, and
+// the material is rougher and less metallic, so the top skin stays GREY
+// in the sun instead of blowing out. Panel lines are thinner and softer
+// than v13: detail, not a grid.
 function panelTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 512;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, '#9AA3AD');
-  grad.addColorStop(0.5, '#8B939D');
-  grad.addColorStop(1, '#7E868F');
+  grad.addColorStop(0, '#7C848E');
+  grad.addColorStop(0.5, '#6E767F');
+  grad.addColorStop(1, '#5F6771');
   g.fillStyle = grad;
   g.fillRect(0, 0, 512, 512);
-  // Weathering blotches, darker and lighter grey — stronger than v8.
-  // v10: more blotches (36) plus large soft two-tone patches, the
-  // patchwork skin of the real Raptor in ref 02 — panels are not one
-  // flat tone, they are a mosaic of slightly different greys.
+  // Weathering blotches + large soft two-tone patches: the patchwork
+  // skin of the real Raptor in ref 02.
   let seed = 4242;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   for (let i = 0; i < 8; i++) {
     const x = rnd() * 512, y = rnd() * 512, w = 60 + rnd() * 130, h = 50 + rnd() * 110;
-    g.fillStyle = rnd() > 0.5 ? 'rgba(148,158,170,0.16)' : 'rgba(118,128,140,0.16)';
+    g.fillStyle = rnd() > 0.5 ? 'rgba(128,138,150,0.14)' : 'rgba(88,96,106,0.14)';
     g.fillRect(x - w / 2, y - h / 2, w, h);
   }
   for (let i = 0; i < 36; i++) {
     const x = rnd() * 512, y = rnd() * 512, r = 20 + rnd() * 60;
     const bg = g.createRadialGradient(x, y, 0, x, y, r);
     const dark = rnd() > 0.45;
-    bg.addColorStop(0, dark ? 'rgba(96,104,114,0.28)' : 'rgba(196,204,214,0.20)');
+    bg.addColorStop(0, dark ? 'rgba(70,78,88,0.24)' : 'rgba(160,168,178,0.16)');
     bg.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = bg;
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
   }
-  // Panel lines: chordwise stations + spanwise seams — thick and dark.
-  g.strokeStyle = 'rgba(52,60,70,0.95)';
-  g.lineWidth = 3.5;
+  // Panel lines: chordwise stations + spanwise seams — thin and soft.
+  g.strokeStyle = 'rgba(48,56,66,0.8)';
+  g.lineWidth = 2.5;
   for (const y of [48, 120, 200, 280, 360, 440]) {
     g.beginPath(); g.moveTo(20, y); g.lineTo(492, y); g.stroke();
   }
   for (const x of [64, 128, 192, 256, 320, 384, 448]) {
     g.beginPath(); g.moveTo(x, 24); g.lineTo(x, 488); g.stroke();
   }
-  // Finer secondary seams between the main stations — the dense
-  // panel grid of ref 02, thin so it reads as detail, not clutter.
-  g.strokeStyle = 'rgba(70,78,88,0.4)';
+  // Finer secondary seams.
+  g.strokeStyle = 'rgba(64,72,82,0.35)';
   g.lineWidth = 1.5;
   for (const y of [84, 160, 240, 320, 400]) {
     g.beginPath(); g.moveTo(20, y); g.lineTo(492, y); g.stroke();
@@ -102,19 +103,19 @@ function panelTexture() {
   g.beginPath(); g.moveTo(20, 470); g.lineTo(256, 300); g.lineTo(492, 470); g.stroke();
   g.beginPath(); g.moveTo(60, 60); g.lineTo(256, 210); g.lineTo(452, 60); g.stroke();
   // Access panels: small stroked rectangles scattered on the skin.
-  g.strokeStyle = 'rgba(60,68,78,0.55)';
+  g.strokeStyle = 'rgba(54,62,72,0.45)';
   g.lineWidth = 2;
   for (let i = 0; i < 16; i++) {
     const x = 30 + rnd() * 420, y = 30 + rnd() * 420;
     g.strokeRect(x, y, 34 + rnd() * 26, 22 + rnd() * 16);
   }
   // Rivet dots along the chordwise lines.
-  g.fillStyle = 'rgba(70,78,88,0.5)';
+  g.fillStyle = 'rgba(64,72,82,0.45)';
   for (const y of [48, 120, 200, 280, 360, 440]) {
     for (let x = 30; x < 500; x += 12) { g.fillRect(x, y - 1, 2, 2); }
   }
   // Pale leading-edge strip.
-  g.fillStyle = 'rgba(210,217,225,0.5)';
+  g.fillStyle = 'rgba(180,188,196,0.4)';
   g.fillRect(0, 0, 512, 14);
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -157,38 +158,33 @@ function wingPanel(mat, x0, x1, chordRoot, chordTip, thickness = 0.14) {
   shape.lineTo(x0, c0);
   shape.closePath();
   const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: thickness, bevelEnabled: true, bevelThickness: 0.12,
-    bevelSize: 0.12, bevelSegments: 4, curveSegments: 16,
+    depth: thickness, bevelEnabled: true, bevelThickness: 0.08,
+    bevelSize: 0.08, bevelSegments: 4, curveSegments: 16,
   });
   geo.rotateX(Math.PI / 2); // chord -> Z, thickness -> Y
   geo.translate(0, thickness / 2 + 0.05, 0);
   // Airfoil camber: crown the upper skin so the wing reads as a curved
-  // aerofoil from behind, not a flat plate (ref 02). Chord tapers from
-  // chordRoot at x0 to chordTip at x1; the crown peaks mid-chord.
+  // aerofoil from behind, not a flat plate (ref 02).
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const s = Math.max(0, Math.min(1, (Math.abs(x) - x0) / Math.max(0.01, x1 - x0)));
     const half = (chordRoot + (chordTip - chordRoot) * s) / 2;
     const u = Math.max(-1, Math.min(1, z / Math.max(0.01, half)));
-    pos.setY(i, pos.getY(i) + 0.12 * Math.max(0, 1 - u * u));
+    pos.setY(i, pos.getY(i) + 0.10 * Math.max(0, 1 - u * u));
   }
   geo.computeVertexNormals();
   return new THREE.Mesh(geo, mat);
 }
 
-// Volumetric fuselage loft (the v9 fix): a chined body built from
-// cross-section rings along Z, nose (+Z) to tail (-Z). Each ring is an
-// 8-point chined section — sharp upper chine, wide mid-body, keeled
-// belly — so the fuselage has real height and width from every angle.
-// The old body was a flat extruded diamond planform; from behind it was
-// a thin triangle with no body at all. This one is a body first, with
-// the delta wing attached to it, not the other way round.
-// Smooth the loft lengthwise: insert interpolated midpoints between the
-// hand-placed stations so the fuselage has 19 rings instead of 10 — the
-// v9 body showed hard rings under the sunset light. More rings, same
-// shape; computeVertexNormals then shades it as one smooth sculpted body
-// (ref 02), not a stack of facets.
+// Volumetric fuselage loft: a chined body built from cross-section rings
+// along Z, nose (+Z) to tail (-Z). Each ring is an 8-point chined
+// section — sharp upper chine, wide mid-body, keeled belly — so the
+// fuselage has real height and width from every angle. Smooth the loft
+// lengthwise: insert interpolated midpoints between the hand-placed
+// stations so the fuselage has 23 rings instead of 12 — more rings,
+// same shape; computeVertexNormals then shades it as one smooth sculpted
+// body (ref 02), not a stack of facets.
 function interpStations(stations) {
   const out = [];
   for (let i = 0; i < stations.length; i++) {
@@ -205,8 +201,8 @@ function interpStations(stations) {
 }
 
 // Rounded rectangle in the XY plane, for ducts and housings that must
-// read as smooth rounded forms — NEVER a box. The owner forbade anything
-// boxy: a rounded-rect extrude with a bevel has soft edges all round.
+// read as smooth rounded forms — NEVER a box. A rounded-rect extrude
+// with a bevel has soft edges all round.
 function roundedRectShape(w, h, r) {
   const s = new THREE.Shape();
   const x = -w / 2, y = -h / 2;
@@ -227,7 +223,7 @@ function roundedRectShape(w, h, r) {
 // along Z (extrusion runs -len/2..+len/2).
 function roundedDuctGeometry(w, h, len, r) {
   const geo = new THREE.ExtrudeGeometry(roundedRectShape(w, h, r), {
-    depth: len, bevelEnabled: true, bevelThickness: 0.07, bevelSize: 0.07,
+    depth: len, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06,
     bevelSegments: 3, curveSegments: 12,
   });
   geo.translate(0, 0, -len / 2);
@@ -294,10 +290,9 @@ function flameCone(color, radius, length, opacity) {
   return mesh;
 }
 
-// Wing skin texture: deliberately SUBTLE. The v10 panel texture's
-// dense grid reads as a dark checkerboard of rectangles on the flat
-// wings — exactly the "kotak-kotak" look the owner forbade. Flat
-// surfaces amplify any regular grid, so the wings get only a soft
+// Wing skin texture: deliberately SUBTLE and now DARKER, like the top
+// skin — the v13 wing washed out with the top skin on the banking shot.
+// Flat surfaces amplify any regular grid, so the wings get only a soft
 // gradient, a few faint chordwise seams and weathering — no spanwise
 // lines, no rivets, no access panels. The rich grid stays ONLY on the
 // round fuselage, where it reads as panel detail (ref 02), not boxes.
@@ -306,9 +301,9 @@ function wingTexture() {
   c.width = 512; c.height = 512;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 512, 512);
-  grad.addColorStop(0, '#AEB6C0');
-  grad.addColorStop(0.5, '#9AA2AD');
-  grad.addColorStop(1, '#8B939E');
+  grad.addColorStop(0, '#8E969F');
+  grad.addColorStop(0.5, '#7E868F');
+  grad.addColorStop(1, '#6E767F');
   g.fillStyle = grad;
   g.fillRect(0, 0, 512, 512);
   let seed = 9917;
@@ -316,19 +311,19 @@ function wingTexture() {
   for (let i = 0; i < 14; i++) {
     const x = rnd() * 512, y = rnd() * 512, r = 30 + rnd() * 70;
     const bg = g.createRadialGradient(x, y, 0, x, y, r);
-    bg.addColorStop(0, rnd() > 0.5 ? 'rgba(120,128,138,0.20)' : 'rgba(200,208,218,0.16)');
+    bg.addColorStop(0, rnd() > 0.5 ? 'rgba(96,104,114,0.18)' : 'rgba(165,173,183,0.14)');
     bg.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = bg;
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
   }
   // Three faint chordwise seams only — the wing is one smooth skin.
-  g.strokeStyle = 'rgba(70,78,88,0.35)';
+  g.strokeStyle = 'rgba(64,72,82,0.32)';
   g.lineWidth = 2;
   for (const y of [140, 260, 380]) {
     g.beginPath(); g.moveTo(20, y); g.lineTo(492, y); g.stroke();
   }
   // Two soft diagonal seams for the panel feel, low alpha.
-  g.strokeStyle = 'rgba(70,78,88,0.30)';
+  g.strokeStyle = 'rgba(64,72,82,0.28)';
   g.beginPath(); g.moveTo(40, 480); g.lineTo(300, 40); g.stroke();
   g.beginPath(); g.moveTo(220, 480); g.lineTo(480, 60); g.stroke();
   const tex = new THREE.CanvasTexture(c);
@@ -341,40 +336,50 @@ export function buildAircraft() {
   const group = new THREE.Group();
   group.name = 'aircraft';
 
-  // Ref 02/08: the real Raptor is LIGHT grey in the sun — bright top
-  // skin with panel lines, mid-grey sides, darker belly, gold canopy.
-  // v8 lighting is kept exactly (cool fill keeps the top grey, warm rim
-  // lights the edges); only the geometry and the panel texture change.
-  const stealth = new THREE.MeshStandardMaterial({ color: 0x6E7680, metalness: 0.45, roughness: 0.42 });
-  const stealthTop = new THREE.MeshStandardMaterial({ map: panelTexture(), color: 0xBFC9D4, metalness: 0.30, roughness: 0.55 });
+  // v14 materials: DARKER and ROUGHER than v13 across the board — the
+  // v13 washout was the pale skin (colour 0xBFC9D4, metalness 0.30,
+  // roughness 0.55) under sun 2.4 + warm fill. Now the multiply colour
+  // is mid-grey, metalness is low and roughness is high, so the grey
+  // survives the sunset instead of blowing out to white-gold (ref 02).
+  const stealth = new THREE.MeshStandardMaterial({ color: 0x565E66, metalness: 0.30, roughness: 0.60 });
+  const stealthTop = new THREE.MeshStandardMaterial({ map: panelTexture(), color: 0xA8B0BA, metalness: 0.15, roughness: 0.72 });
   // Wing skin: the subtle texture above — no grid on the flat wings.
-  const wingTop = new THREE.MeshStandardMaterial({ map: wingTexture(), color: 0xC6CED8, metalness: 0.30, roughness: 0.55 });
+  const wingTop = new THREE.MeshStandardMaterial({ map: wingTexture(), color: 0xA8B0BA, metalness: 0.15, roughness: 0.72 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x3A4048, metalness: 0.6, roughness: 0.45 });
   const nozzleMat = new THREE.MeshStandardMaterial({ color: 0x2A2E33, metalness: 0.85, roughness: 0.35 });
   const nozzleRingMat = new THREE.MeshStandardMaterial({ color: 0x9AA0A8, metalness: 0.9, roughness: 0.3 });
   const emberTex = emberTexture();
+  // Canopy glass: less mirror than v13 (metalness 0.95 -> 0.70,
+  // roughness 0.08 -> 0.25) so it stays gold instead of flashing white
+  // when the sun hits it on the banking shot.
   const glass = new THREE.MeshStandardMaterial({
-    color: 0xC9962E, metalness: 0.95, roughness: 0.08,
-    emissive: 0x7A4A10, emissiveIntensity: 0.7,
+    color: 0xC9962E, metalness: 0.70, roughness: 0.25,
+    emissive: 0x7A4A10, emissiveIntensity: 0.35,
   });
   const tyre = new THREE.MeshStandardMaterial({ color: 0x1E1E1E, roughness: 0.95 });
   const hubMat = new THREE.MeshStandardMaterial({ color: 0xB0BEC5, metalness: 0.8, roughness: 0.3 });
 
   // Fuselage: chined loft, nose toward +Z. Stations are {z, y, w, ht, hb}:
-  // half-width, top height and belly depth at each station. The body is
-  // ~10.4 m long, ~2.1 m wide and ~1.5 m tall at mid-body — from behind
-  // it is a tall body between the wings, with the canopy rising above it.
+  // half-width, top height and belly depth at each station. TRUE F-22
+  // proportions at model scale: the body is 12.6 m long, 1.34 m wide and
+  // ~1.0 m tall at mid-body — LONG and NARROW (real jet 18.9 m long on a
+  // 2.0 m wide body). The v13 body was 10.4 m long and 2.32 m wide:
+  // stubby and twice too fat, which is why it read as a toy. From behind
+  // this one is a slim diamond between the wings, with the canopy rising
+  // above it.
   const FUSELAGE_STATIONS = [
-    { z: 5.4, y: 0.00, w: 0.03, ht: 0.03, hb: 0.03 }, // nose tip
-    { z: 4.8, y: 0.02, w: 0.24, ht: 0.22, hb: 0.20 },
-    { z: 4.0, y: 0.05, w: 0.50, ht: 0.42, hb: 0.36 },
-    { z: 3.0, y: 0.06, w: 0.74, ht: 0.64, hb: 0.52 },
-    { z: 1.8, y: 0.03, w: 0.96, ht: 0.82, hb: 0.66 },
-    { z: 0.5, y: 0.02, w: 1.16, ht: 0.95, hb: 0.76 },
-    { z: -1.2, y: 0.02, w: 1.13, ht: 0.90, hb: 0.72 },
-    { z: -2.8, y: 0.00, w: 1.00, ht: 0.74, hb: 0.60 },
-    { z: -4.2, y: -0.03, w: 0.86, ht: 0.56, hb: 0.44 },
-    { z: -5.0, y: -0.03, w: 0.78, ht: 0.48, hb: 0.38 }, // tail face
+    { z: 6.6, y: 0.00, w: 0.02, ht: 0.02, hb: 0.02 }, // nose tip
+    { z: 6.1, y: 0.01, w: 0.14, ht: 0.12, hb: 0.10 },
+    { z: 5.3, y: 0.03, w: 0.30, ht: 0.26, hb: 0.22 },
+    { z: 4.3, y: 0.05, w: 0.48, ht: 0.42, hb: 0.34 },
+    { z: 3.1, y: 0.06, w: 0.62, ht: 0.52, hb: 0.42 },
+    { z: 1.9, y: 0.04, w: 0.67, ht: 0.55, hb: 0.45 },
+    { z: 0.5, y: 0.02, w: 0.67, ht: 0.55, hb: 0.45 },
+    { z: -1.1, y: 0.02, w: 0.64, ht: 0.50, hb: 0.42 },
+    { z: -2.7, y: 0.00, w: 0.58, ht: 0.44, hb: 0.36 },
+    { z: -4.3, y: -0.02, w: 0.52, ht: 0.36, hb: 0.30 },
+    { z: -5.3, y: -0.03, w: 0.47, ht: 0.30, hb: 0.26 },
+    { z: -6.0, y: -0.03, w: 0.44, ht: 0.27, hb: 0.24 }, // tail face
   ];
   // The fuselage gets its own panel-texture instance: the loft's UVs run
   // u = around the ring, v = along the body, so repeat (1,1) puts the
@@ -382,23 +387,26 @@ export function buildAircraft() {
   const fuseTex = panelTexture();
   fuseTex.repeat.set(1, 1);
   fuseTex.offset.set(0, 0);
-  const fuselageMat = new THREE.MeshStandardMaterial({ map: fuseTex, color: 0xBFC9D4, metalness: 0.30, roughness: 0.55 });
+  const fuselageMat = new THREE.MeshStandardMaterial({ map: fuseTex, color: 0xA8B0BA, metalness: 0.15, roughness: 0.72 });
   const fuselage = new THREE.Mesh(fuselageGeometry(interpStations(FUSELAGE_STATIONS)), fuselageMat);
   fuselage.name = 'fuselage';
   group.add(fuselage);
 
   // Dorsal spine: a low raised fairing along the fuselage top from the
   // canopy to the tail — the centreline volume that reads from behind.
-  const spine = new THREE.Mesh(roundedDuctGeometry(0.55, 0.34, 4.6, 0.15), stealthTop);
-  spine.position.set(0, 0.88, -1.6);
+  const spine = new THREE.Mesh(roundedDuctGeometry(0.42, 0.26, 5.0, 0.12), stealthTop);
+  spine.position.set(0, 0.62, -1.6);
   group.add(spine);
 
   // Main delta wings: separate panels, low-mounted on the fuselage
-  // (y -0.22, below the body centreline), slight anhedral, blended into
-  // the fuselage sides. The wing is one part — the body is the other.
+  // (y -0.18, below the body centreline), slight anhedral, blended into
+  // the fuselage sides. TRUE proportions: root chord 3.7 m on a 12.6 m
+  // body (ratio 0.29, like the real jet) and span 9.0 m — the v13 wing
+  // root chord was 6.0 m on a 10.4 m body (ratio 0.58), which is why the
+  // jet was mostly wing. The wing is one part — the body is the other.
   for (const side of [-1, 1]) {
-    const wing = wingPanel(wingTop, 0.55, 3.6, 6.0, 1.2, 0.32);
-    wing.position.set(0, -0.22, -0.6);
+    const wing = wingPanel(wingTop, 0.45, 4.52, 3.7, 0.8, 0.22);
+    wing.position.set(0, -0.18, -0.9);
     wing.rotation.z = -0.05; // slight anhedral
     if (side < 0) wing.rotation.y = Math.PI;
     wing.name = 'wing';
@@ -406,8 +414,8 @@ export function buildAircraft() {
     // LERX: the forward strake from the wing root to the cockpit, a
     // raised plate on the wing's leading edge — the F-22's chined
     // forebody extension, visible on the banking shot.
-    const lerx = wingPanel(wingTop, 0.5, 2.2, 3.0, 1.0, 0.20);
-    lerx.position.set(0, 0.02, 1.8);
+    const lerx = wingPanel(wingTop, 0.4, 1.9, 2.4, 0.8, 0.16);
+    lerx.position.set(0, 0.02, 2.4);
     lerx.rotation.z = -0.05;
     if (side < 0) lerx.rotation.y = Math.PI;
     lerx.name = 'lerx';
@@ -415,54 +423,56 @@ export function buildAircraft() {
   }
 
   // Canopy: a LONG gold bubble FLUSH with the fuselage top, from ahead
-  // of the wing to the nose — not a ball perched on a flat plate. v10:
-  // stretched longer and sunk lower so it flows into the forebody line
-  // like the real Raptor's canopy in ref 02 (the v9 bubble sat proud
-  // like a gold ball on top of the fuselage).
+  // of the wing to the nose — not a ball perched on a flat plate. Sized
+  // to the real jet (2.3 m long, 0.6 m wide) and raised so it reads
+  // clearly from behind as a gold bubble on the spine — the v13 canopy
+  // was a tiny gold dot from the chase camera.
   const canopy = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), glass);
-  canopy.scale.set(0.58, 0.44, 1.9);
-  canopy.position.set(0, 0.78, 1.7);
+  canopy.scale.set(0.30, 0.23, 1.15);
+  canopy.position.set(0, 0.58, 2.7);
   canopy.name = 'canopy';
   group.add(canopy);
   // Canopy frame: a dark flattened ring the gold bubble sits in, so the
   // canopy reads as a framed cockpit, not a ball on the fuselage.
-  const coaming = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.11, 10, 32), dark);
+  const coaming = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.07, 10, 32), dark);
   coaming.rotation.x = Math.PI / 2;
-  coaming.scale.set(0.62, 1.7, 0.4);
-  coaming.position.set(0, 0.86, 1.7);
+  coaming.scale.set(0.55, 1.9, 0.4);
+  coaming.position.set(0, 0.62, 2.7);
   group.add(coaming);
 
-  // Canted twin tails: tall swept fins leaning out ~28 degrees, the
-  // Raptor's signature. Taller than v8 (2.15 m) so they read from behind.
+  // Canted twin tails: tall but SLIM swept fins leaning out ~28 degrees,
+  // the Raptor's signature. The v13 fins were 2.4 m chord slabs that
+  // dominated the whole rear view like barn doors; these are 1.7 m at
+  // the root tapering to 0.4 m at the tip and only 0.14 m thick — tall
+  // blades, like ref 01.
   const finShape = new THREE.Shape();
-  finShape.moveTo(-1.3, 0);
-  finShape.lineTo(1.1, 0);
-  finShape.lineTo(0.75, 1.5);
-  finShape.lineTo(0.15, 2.15);
-  finShape.lineTo(-0.65, 1.7);
-  finShape.lineTo(-1.2, 0.7);
+  finShape.moveTo(-0.85, 0);
+  finShape.lineTo(0.85, 0);
+  finShape.lineTo(0.55, 1.6);
+  finShape.lineTo(0.15, 2.3);
+  finShape.lineTo(-0.25, 1.9);
+  finShape.lineTo(-0.7, 0.6);
   finShape.closePath();
   const finGeo = new THREE.ExtrudeGeometry(finShape, {
-    depth: 0.3, bevelEnabled: true, bevelThickness: 0.08,
-    bevelSize: 0.08, bevelSegments: 4, curveSegments: 12,
+    depth: 0.14, bevelEnabled: true, bevelThickness: 0.05,
+    bevelSize: 0.05, bevelSegments: 4, curveSegments: 12,
   });
   finGeo.rotateY(-Math.PI / 2); // chord -> Z, leading edge toward the nose
   finGeo.translate(-0.07, 0, 0); // centre the thickness on the local origin
   const decalTex = raptorDecalTexture();
   for (const side of [-1, 1]) {
     const tail = new THREE.Group();
-    tail.position.set(side * 0.85, 0.45, -3.4);
+    tail.position.set(side * 0.62, 0.30, -4.3);
     tail.rotation.z = -side * 0.5; // cant outward ~28 deg
     const fin = new THREE.Mesh(finGeo, stealth);
-    fin.scale.set(1.08, 1.08, 1.2);
     tail.add(fin);
     // "RAPTOR" + tail number on the outer face of the fin.
     const decal = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.5, 0.28),
+      new THREE.PlaneGeometry(1.0, 0.19),
       new THREE.MeshBasicMaterial({ map: decalTex, transparent: true, side: THREE.DoubleSide }),
     );
     decal.userData.noShadow = true;
-    decal.position.set(side * 0.25, 1.1, 0);
+    decal.position.set(side * 0.16, 1.2, 0);
     decal.rotation.y = side * Math.PI / 2;
     tail.add(decal);
     group.add(tail);
@@ -470,74 +480,73 @@ export function buildAircraft() {
 
   // Stabilators: small all-moving tails, slight anhedral, on the tail.
   for (const side of [-1, 1]) {
-    const stab = wingPanel(wingTop, 0.15, 2.5, 1.5, 0.9, 0.14);
-    stab.position.set(0, -0.05, -4.15);
+    const stab = wingPanel(wingTop, 0.1, 2.0, 1.2, 0.65, 0.10);
+    stab.position.set(0, -0.05, -5.0);
     stab.rotation.z = -0.07;
     if (side < 0) stab.rotation.y = Math.PI;
     group.add(stab);
   }
 
-  // Caret intakes: BIG rounded ducts on the fuselage sides, with dark
+  // Caret intakes: slim rounded ducts on the fuselage sides, with dark
   // forward mouths and a ramp lip above — visible from behind as rounded
   // forms flanking the body and from the side as the F-22's intakes.
-  // v10: NO BOXES — the v9 duct was a literal BoxGeometry; this one is
-  // a rounded-rect extrude with a bevel, so every edge is soft.
+  // Rounded-rect extrude with a bevel, so every edge is soft — NO BOXES.
   const mouthMat = new THREE.MeshBasicMaterial({ color: 0x0A0C0E });
   for (const side of [-1, 1]) {
-    const duct = new THREE.Mesh(roundedDuctGeometry(0.72, 1.12, 2.5, 0.26), dark);
-    duct.position.set(side * 1.26, 0.02, 1.35);
+    const duct = new THREE.Mesh(roundedDuctGeometry(0.5, 0.85, 2.0, 0.22), dark);
+    duct.position.set(side * 0.82, -0.08, 1.7);
     duct.name = 'intake';
     group.add(duct);
-    const mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 1.0), mouthMat);
+    const mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.75), mouthMat);
     mouth.userData.noShadow = true;
-    mouth.position.set(side * 1.26, 0.02, 2.61);
+    mouth.position.set(side * 0.82, -0.08, 2.71);
     group.add(mouth);
     // Ramp lip: a flattened half-cylinder, rounded, not a slab.
-    const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.5, 16), stealth);
+    const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.4, 16), stealth);
     lip.rotation.x = Math.PI / 2 - 0.25; // axis along Z, tilted like a ramp
     lip.scale.set(1, 1, 0.35);
-    lip.position.set(side * 1.26, 0.55, 2.4);
+    lip.position.set(side * 0.82, 0.42, 2.5);
     group.add(lip);
   }
 
-  // Twin nozzles at the tail face: rounded housings (v10: the v9 box
-  // housings read as cubes from behind — these are flattened oval
-  // cylinders), each with a flared petal ring (ref 01) and a layered
-  // hot core disc inside that brightens with the afterburner. Spaced
-  // to hug the narrow tail face.
+  // Twin nozzles at the tail face: SMALL and modest, like ref 01 — the
+  // v13 nozzles were 1.0 m discs on a 1.56 m tail face, so they read as
+  // two giant headlights. These are 0.6 m across on a 0.88 m tail face,
+  // each with a flared petal ring (ref 01) and a layered hot core disc
+  // inside that brightens with the afterburner.
   const emberMat = new THREE.MeshBasicMaterial({ map: emberTex });
   const embers = [];
   for (const side of [-1, 1]) {
-    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.50, 1.0, 24), nozzleMat);
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.34, 0.8, 24), nozzleMat);
     nozzle.rotation.x = Math.PI / 2; // axis along Z
     nozzle.scale.set(1, 1, 0.72); // slightly flattened oval
-    nozzle.position.set(side * 0.58, -0.05, -4.85);
+    nozzle.position.set(side * 0.34, -0.02, -5.85);
     group.add(nozzle);
     // Flared petal ring at the nozzle exit: a short open cone, metallic.
     const petal = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.36, 0.42, 0.32, 24, 1, true),
+      new THREE.CylinderGeometry(0.26, 0.30, 0.26, 24, 1, true),
       new THREE.MeshStandardMaterial({ color: 0x6E7278, metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide }),
     );
     petal.rotation.x = Math.PI / 2;
-    petal.position.set(side * 0.58, -0.05, -5.36);
+    petal.position.set(side * 0.34, -0.02, -6.26);
     group.add(petal);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.37, 0.09, 12, 24), nozzleRingMat);
-    ring.position.set(side * 0.58, -0.05, -5.34);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.06, 12, 24), nozzleRingMat);
+    ring.position.set(side * 0.34, -0.02, -6.24);
     group.add(ring);
-    const ember = new THREE.Mesh(new THREE.CircleGeometry(0.36, 24), emberMat);
+    const ember = new THREE.Mesh(new THREE.CircleGeometry(0.25, 24), emberMat);
     ember.rotation.y = Math.PI; // face backward
-    ember.position.set(side * 0.58, -0.05, -5.35);
+    ember.position.set(side * 0.34, -0.02, -6.25);
     ember.userData.noShadow = true;
     group.add(ember);
     embers.push(ember);
   }
 
   // Afterburner: layered flames behind each nozzle (orange shell, yellow
-  // core, blue root) plus a warm point light. The flame groups scale in
-  // Z so the flame grows out of the nozzle instead of sliding.
-  // v8: flames SHORTER (4.2 -> 2.8 m) and smaller — in v7 the two giant
-  // yellow cones covered the whole rear of the jet. Ref 08's flame is
-  // a compact layered glow inside the nozzle, not a fireball.
+  // core, blue root) plus a warm point light. SMALLER than v13 — the v13
+  // flames plus their glare sprites were the "headlights". The flame
+  // groups scale in Z so the flame grows out of the nozzle instead of
+  // sliding. Ref 08's flame is a compact layered glow inside the
+  // nozzle, not a fireball.
   const glowTex = glowTexture();
   const flames = [];
   const abLight = new THREE.PointLight(0xFF8033, 0, 60, 1.5);
@@ -545,22 +554,22 @@ export function buildAircraft() {
   group.add(abLight);
   for (const side of [-1, 1]) {
     const fg = new THREE.Group();
-    fg.position.set(side * 0.58, -0.05, -5.4);
-    fg.add(flameCone(0xFF7A18, 0.34, 2.8, 0.42));
-    fg.add(flameCone(0xFFD75E, 0.20, 2.0, 0.7));
-    fg.add(flameCone(0x66CCFF, 0.10, 1.1, 0.6));
-    fg.add(flameCone(0xFFF6D8, 0.08, 0.7, 0.8)); // white-hot core
+    fg.position.set(side * 0.34, -0.02, -6.3);
+    fg.add(flameCone(0xFF7A18, 0.20, 1.8, 0.42));
+    fg.add(flameCone(0xFFD75E, 0.12, 1.3, 0.7));
+    fg.add(flameCone(0x66CCFF, 0.06, 0.7, 0.6));
+    fg.add(flameCone(0xFFF6D8, 0.04, 0.45, 0.8)); // white-hot core
     fg.scale.set(0.001, 0.001, 0.001);
     fg.visible = false;
     group.add(fg);
     flames.push(fg);
     // Nozzle glare sprite, always faintly on, bright with the burner.
     const glare = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTex, color: 0xFF8033, transparent: true, opacity: 0.25,
+      map: glowTex, color: 0xFF8033, transparent: true, opacity: 0.15,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
-    glare.scale.setScalar(1.6);
-    glare.position.set(side * 0.58, -0.05, -5.45);
+    glare.scale.setScalar(0.9);
+    glare.position.set(side * 0.34, -0.02, -6.35);
     group.add(glare);
     flames.push(glare);
   }
@@ -568,53 +577,53 @@ export function buildAircraft() {
   // Wingtip missile rails: thin rounded rails along each tip chord —
   // the small hard detail that makes the wing read as built, not cut.
   for (const side of [-1, 1]) {
-    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.3, 8), dark);
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.1, 8), dark);
     rail.rotation.x = Math.PI / 2;
-    rail.position.set(side * 3.55, -0.18, -0.6);
+    rail.position.set(side * 4.48, -0.14, -0.9);
     group.add(rail);
   }
 
   // Landing gear: nose + two mains, raked legs, real tyres with hubs.
   for (const side of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.1, 8), dark);
-    leg.position.set(side * 1.5, -0.95, -0.6);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 8), dark);
+    leg.position.set(side * 1.15, -0.85, -0.8);
     leg.rotation.z = side * 0.25;
     group.add(leg);
     const wheel = new THREE.Group();
-    wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.12, 10, 18), tyre));
-    const hubDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.3, 14), hubMat);
+    wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.30, 0.11, 10, 18), tyre));
+    const hubDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.28, 14), hubMat);
     hubDisc.rotation.x = Math.PI / 2;
     wheel.add(hubDisc);
-    wheel.position.set(side * 1.65, -1.35, -0.6);
+    wheel.position.set(side * 1.28, -1.25, -0.8);
     group.add(wheel);
   }
-  const noseLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 8), dark);
-  noseLeg.position.set(0, -0.85, 3.1);
+  const noseLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 8), dark);
+  noseLeg.position.set(0, -0.78, 3.8);
   group.add(noseLeg);
   const noseWheel = new THREE.Group();
-  noseWheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.09, 10, 16), tyre));
-  noseWheel.position.set(0, -1.25, 3.1);
+  noseWheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.08, 10, 16), tyre));
+  noseWheel.position.set(0, -1.15, 3.8);
   group.add(noseWheel);
 
   // Pitot tube on the nose + antenna mast on the spine.
   const pitot = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.7, 6), dark);
   pitot.rotation.x = Math.PI / 2;
-  pitot.position.set(0.35, 0.1, 4.2);
+  pitot.position.set(0.3, 0.08, 5.2);
   group.add(pitot);
-  const antenna = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.5, 6), dark);
-  antenna.position.set(0, 1.15, -0.5); // on the dorsal spine
+  const antenna = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.45, 6), dark);
+  antenna.position.set(0, 0.85, -0.5); // on the dorsal spine
   group.add(antenna);
 
   // Navigation lights: red left, green right, white tail — emissive
   // lamps plus an additive glow sprite so they read at dusk.
   const lights = [
-    [0xFF2222, -3.55, -0.1, -0.6],
-    [0x22FF66, 3.55, -0.1, -0.6],
-    [0xFFFFFF, 0, 0.3, -5.0],
+    [0xFF2222, -4.48, -0.1, -0.9],
+    [0x22FF66, 4.48, -0.1, -0.9],
+    [0xFFFFFF, 0, 0.3, -6.0],
   ];
   for (const [col, x, y, z] of lights) {
     const lamp = new THREE.Mesh(
-      new THREE.SphereGeometry(0.11, 10, 8),
+      new THREE.SphereGeometry(0.09, 10, 8),
       new THREE.MeshBasicMaterial({ color: col }),
     );
     lamp.position.set(x, y, z);
@@ -623,7 +632,7 @@ export function buildAircraft() {
       map: glowTex, color: col, transparent: true, opacity: 0.85,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
-    glow.scale.setScalar(0.9);
+    glow.scale.setScalar(0.8);
     glow.position.set(x, y, z);
     group.add(glow);
   }
@@ -656,10 +665,10 @@ export function buildAircraft() {
         fg.scale.set(w, w, Math.max(0.02, abLevel));
         const glare = flames[i * 2 + 1];
         glare.visible = true;
-        glare.material.opacity = 0.18 + 0.5 * abLevel;
-        glare.scale.setScalar(1.6 + 0.8 * abLevel);
+        glare.material.opacity = 0.10 + 0.35 * abLevel;
+        glare.scale.setScalar(0.9 + 0.5 * abLevel);
       }
-      abLight.intensity = 50 * abLevel;
+      abLight.intensity = 30 * abLevel;
       emberMat.color.setHex(0xFFFFFF); // full gradient while burning
     },
   };
