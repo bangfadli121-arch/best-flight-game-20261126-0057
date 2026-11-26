@@ -32,8 +32,10 @@ const SHOTS = {
   2: { pos: [350, 80, 820], yaw: 2.44, roll: 0, ring: 6, dusk: 0.15, score: 600, time: 198, fuel: 78, speed: 95, throttle: 0.45, ab: false },
   // Shot 3: banking turn toward the sun, yawed a touch south of due west
   // so the sea glint sits left of centre instead of straight down the
-  // middle of the frame. Burners lit on the bank.
-  3: { pos: [-500, 215, -200], yaw: -1.45, roll: -0.61, ring: 1, dusk: 0.25, score: 100, time: 228, fuel: 92, speed: 250, throttle: 0.9, ab: true },
+  // middle of the frame. Burners lit on the bank. v8 (ref 08): yawed a
+  // little more toward the sun and flown lower, so the glitter field
+  // fills the lower frame like the Ace Combat shot.
+  3: { pos: [-520, 190, -180], yaw: -1.38, roll: -0.68, ring: 1, dusk: 0.25, score: 100, time: 228, fuel: 92, speed: 250, throttle: 0.9, ab: true },
   // Shot 4: 200 m from ring 3 (-1400, 310, -1100) down its course leg,
   // instead of 1000 m away — the gold gate is full-size in frame with
   // the snowy volcano cone right behind it.
@@ -47,7 +49,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.18;
+renderer.toneMappingExposure = 1.12;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 // Soft shadows: the sun throws the plane's shadow onto the terrain below.
 renderer.shadowMap.enabled = true;
@@ -55,20 +57,25 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('gl').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x7A3B5C, 1500, 7500);
+scene.fog = new THREE.Fog(0x8A4A5A, 1500, 7500);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 20000);
 camera.position.set(500, 170, 1520);
 
 const sky = buildSky(scene);
-const sunLight = new THREE.DirectionalLight(0xFFB36B, 3.0);
+// v8 light rebalance — the v7 defect was a GOLD jet: sun 0xFFB36B at 3.0
+// plus a warm-pink hemisphere at 1.45 flooded every top surface with
+// orange. Now the sun is cooler and weaker, the hemisphere is cool
+// steel-blue, and a dedicated cool top fill keeps the Raptor grey
+// (ref 02) while the warm fill still rims the edges (ref 03/08).
+const sunLight = new THREE.DirectionalLight(0xFFC08A, 2.4);
 sunLight.position.copy(sky.sunDir).multiplyScalar(5000);
 sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(1024, 1024);
-sunLight.shadow.camera.left = -280;
-sunLight.shadow.camera.right = 280;
-sunLight.shadow.camera.top = 280;
-sunLight.shadow.camera.bottom = -280;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.left = -320;
+sunLight.shadow.camera.right = 320;
+sunLight.shadow.camera.top = 320;
+sunLight.shadow.camera.bottom = -320;
 sunLight.shadow.camera.near = 50;
 sunLight.shadow.camera.far = 2600;
 sunLight.shadow.bias = -0.0004;
@@ -78,12 +85,18 @@ scene.add(sunLight.target);
 // Warm sunset bounce from the east (ref 03/08): the low western sun
 // leaves the jet's rear in shadow from the chase camera, so this low
 // warm fill rims the wings, tails and fuselage in orange — the jet
-// reads as a lit Raptor instead of a black blob. Kept moderate (0.6):
-// at 0.9 the light-grey top skin washed out to gold.
-const fillLight = new THREE.DirectionalLight(0xFF9A55, 0.6);
+// reads as a lit Raptor instead of a black blob. Kept at 0.5: it is a
+// rim, not a flood; a flood is what turned the top skin gold in v7.
+const fillLight = new THREE.DirectionalLight(0xFF7A3D, 0.5);
 fillLight.position.set(4000, 1200, 2000);
 scene.add(fillLight);
-scene.add(new THREE.HemisphereLight(0xB85A6B, 0x0E3A3A, 1.45));
+// Cool sky fill from above-east: the counterweight to the warm sun.
+// Without it the light-grey top skin has no cool light to answer with
+// and reads gold; with it the top stays grey (ref 02) in the sunset.
+const skyFill = new THREE.DirectionalLight(0xB9CCE8, 0.55);
+skyFill.position.set(2000, 4200, -1500);
+scene.add(skyFill);
+scene.add(new THREE.HemisphereLight(0x93A7C9, 0x1E3A34, 1.3));
 
 buildTerrain(scene);
 const aircraft = buildAircraft();
