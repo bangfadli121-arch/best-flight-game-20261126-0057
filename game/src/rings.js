@@ -4,6 +4,7 @@
 // gates go green and dim.
 
 import * as THREE from 'three';
+import { terrainHeight } from './terrain.js';
 
 export const RING_POINTS = 100;
 export const RING_TIME_BONUS_S = 12;
@@ -208,7 +209,22 @@ export class RingCourse {
     });
     const def = this.nextDef();
     if (def) {
-      this.labelSprite.position.set(def.x, def.y + def.r + 12, def.z);
+      // v19: the label hangs BELOW the next gate. Above the gate it
+      // collided with the HUD's "RING N AHEAD" pill in the cover shot
+      // (the gate is 66 m ahead and its label looms right under the
+      // pill, its top edge clipped). Below the gate it stays attached
+      // to the gate and clear of every HUD panel. Course, pass
+      // detection and colours are untouched — this is only the label's
+      // offset.
+      // v19b: clamp above the terrain — the low gates sit close to the
+      // ground (ring 7: gate y 62 over runway terrain 42; ring 2: gate
+      // y 170 over hillside 162.7), so "below the gate" put the label
+      // UNDERGROUND and it vanished in shot 2. The clamp only moves
+      // those two gates' labels (into the gate opening, still attached
+      // and visible); rings 1 and 4 are far above the terrain and are
+      // unchanged. terrain.js imports only three, so no cycle.
+      const labelY = Math.max(def.y - def.r - 12, terrainHeight(def.x, def.z) + 10);
+      this.labelSprite.position.set(def.x, labelY, def.z);
       this.glow.position.set(def.x, def.y, def.z);
       this.glow.visible = true;
     } else {
