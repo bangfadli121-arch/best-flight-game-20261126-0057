@@ -49,7 +49,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.18; // v17: a touch brighter for the AC7 sunlit look
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 // Soft shadows: the sun throws the plane's shadow onto the terrain below.
 renderer.shadowMap.enabled = true;
@@ -68,7 +68,7 @@ const sky = buildSky(scene);
 // orange. Now the sun is cooler and weaker, the hemisphere is cool
 // steel-blue, and a dedicated cool top fill keeps the Raptor grey
 // (ref 02) while the warm fill still rims the edges (ref 03/08).
-const sunLight = new THREE.DirectionalLight(0xFFC08A, 2.4);
+const sunLight = new THREE.DirectionalLight(0xFFC08A, 2.7); // v17: stronger warm sun for the AC7 sunlit jet
 sunLight.position.copy(sky.sunDir).multiplyScalar(5000);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(2048, 2048);
@@ -87,7 +87,7 @@ scene.add(sunLight.target);
 // warm fill rims the wings, tails and fuselage in orange — the jet
 // reads as a lit Raptor instead of a black blob. Kept at 0.5: it is a
 // rim, not a flood; a flood is what turned the top skin gold in v7.
-const fillLight = new THREE.DirectionalLight(0xFF7A3D, 0.5);
+const fillLight = new THREE.DirectionalLight(0xFF7A3D, 0.7); // v17: stronger warm rim for the 3/4 flank
 fillLight.position.set(4000, 1200, 2000);
 scene.add(fillLight);
 // Cool sky fill from above-east: the counterweight to the warm sun.
@@ -247,9 +247,13 @@ const _off = new THREE.Vector3();
 const _look = new THREE.Vector3();
 
 function updateCamera(dt) {
-  // Chase cam, pulled a little further back than the bush plane's: the
-  // jet is longer, so 18 m keeps the whole delta in frame.
-  _off.set(0, 3.8, -18).applyQuaternion(model.quat).add(model.pos);
+  // Chase cam (v17, fadli-15a AC7): 3/4 from behind-above-LEFT — the
+  // dead-behind angle is the ugliest for any jet, and AC7's chase cam
+  // sits off to the side so you see the sunlit flank + top. Same ~18 m
+  // distance, so the jet stays the same size in frame; only the angle
+  // changes. Left side because the low western sun lights the left
+  // flank on the north/west-bound shots.
+  _off.set(-6.0, 5.0, -16.5).applyQuaternion(model.quat).add(model.pos);
   _look.set(0, 2.0, 16).applyQuaternion(model.quat).add(model.pos);
   // Staged shots snap the camera at once: a lerped camera never converges
   // in a slow headless renderer before the screenshot is taken.
