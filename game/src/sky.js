@@ -200,18 +200,19 @@ export function buildSky(scene) {
 
   // A second, higher cloud layer: bigger, fainter banks drifting far
   // above the first, so the sky has depth instead of one flat band.
+  // Kept faint (they read as white scratches in the red sky when opaque).
   const cloudsHigh = new THREE.Group();
   cloudsHigh.name = 'clouds-high';
   const highMat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, opacity: 0.30, depthWrite: false,
+    map: tex, transparent: true, opacity: 0.16, depthWrite: false,
     color: 0xFFF2DD, fog: false,
   });
-  for (let k = 0; k < 14; k++) {
+  for (let k = 0; k < 9; k++) {
     const az = rnd() * Math.PI * 2;
     const r = 5200 + rnd() * 2200;
     const s = new THREE.Sprite(highMat);
     s.position.set(Math.cos(az) * r, 950 + rnd() * 450, Math.sin(az) * r);
-    const w = 1400 + rnd() * 1200;
+    const w = 1200 + rnd() * 800;
     s.scale.set(w, w * 0.45, 1);
     cloudsHigh.add(s);
   }
