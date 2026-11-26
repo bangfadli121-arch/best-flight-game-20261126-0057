@@ -194,18 +194,21 @@ export function buildSky(scene) {
   });
   let seed = 7;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  const bankAzimuths = [0.35, 1.45, 2.55, 3.95, 5.25];
+  const bankAzimuths = [0.35, 1.15, 1.95, 2.55, 3.35, 3.95, 5.25];
   for (const az of bankAzimuths) {
     const r = 4600 + rnd() * 1400;
     const cx = Math.cos(az) * r, cz = Math.sin(az) * r;
     const cy = 380 + rnd() * 320;
-    const puffs = 8 + Math.floor(rnd() * 4);
-    const span = 1100 + rnd() * 700;
+    // v10: 12-16 puffs per bank (was 8-11) across SEVEN azimuths
+    // (was five), wider spans and bigger puffs — the dusk sky must
+    // feel FULL, a layered ceiling like ref 08/03, not a few blobs.
+    const puffs = 12 + Math.floor(rnd() * 5);
+    const span = 1300 + rnd() * 900;
     for (let p = 0; p < puffs; p++) {
       // Row along the bank with a domed top: the middle puffs sit higher.
       const u = (p / (puffs - 1)) * 2 - 1; // -1..1 along the bank
       const tx = -Math.sin(az), tz = Math.cos(az); // tangent direction
-      const w = 520 + rnd() * 380;
+      const w = 600 + rnd() * 500;
       // v9: each puff gets a tint from a wide palette (gold, pink,
       // pale, warm brown) with its own opacity and rotation — the v8
       // banks read as one yellow smear because every sprite shared
@@ -237,7 +240,7 @@ export function buildSky(scene) {
     map: tex, transparent: true, opacity: 0.16, depthWrite: false,
     color: 0xFFF2DD, fog: false,
   });
-  for (let k = 0; k < 9; k++) {
+  for (let k = 0; k < 14; k++) {
     const az = rnd() * Math.PI * 2;
     const r = 5200 + rnd() * 2200;
     const s = new THREE.Sprite(highMat);
