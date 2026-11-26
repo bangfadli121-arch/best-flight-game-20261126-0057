@@ -57,12 +57,30 @@ function cumulusTexture() {
   for (const [x, r] of [[80, 44], [130, 46], [180, 42]]) puff(x, 110, r);
   for (const [x, r] of [[105, 38], [150, 38]]) puff(x, 72, r);
   puff(128, 40, 30);
-  // Sunset tint: bright on top, orange underneath.
+  // Dark shadow puffs at the base (ref 08): a lit cloud has a dark
+  // mauve-brown underside. Without it the whole sprite is one flat
+  // yellow blob — the v8 defect.
+  const shadow = (x, y, r, a) => {
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(96,64,84,${a})`);
+    grad.addColorStop(1, 'rgba(96,64,84,0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  };
+  shadow(60, 215, 40, 0.55);
+  shadow(128, 225, 48, 0.6);
+  shadow(196, 215, 40, 0.55);
+  shadow(95, 232, 34, 0.5);
+  shadow(160, 232, 34, 0.5);
+  // Sunset tint: bright gold-white on top, orange in the middle, dark
+  // mauve at the base — the gradient is what gives the cloud its lit
+  // top and shadowed belly instead of one flat yellow.
   g.globalCompositeOperation = 'source-atop';
   const tint = g.createLinearGradient(0, 0, 0, 256);
   tint.addColorStop(0, 'rgba(255,246,220,1)');
-  tint.addColorStop(0.45, 'rgba(255,217,160,1)');
-  tint.addColorStop(1, 'rgba(255,158,87,1)');
+  tint.addColorStop(0.4, 'rgba(255,217,160,1)');
+  tint.addColorStop(0.7, 'rgba(255,158,87,1)');
+  tint.addColorStop(1, 'rgba(196,120,110,1)');
   g.fillStyle = tint;
   g.fillRect(0, 0, 256, 256);
   g.globalCompositeOperation = 'source-over';
@@ -188,22 +206,23 @@ export function buildSky(scene) {
       const u = (p / (puffs - 1)) * 2 - 1; // -1..1 along the bank
       const tx = -Math.sin(az), tz = Math.cos(az); // tangent direction
       const w = 520 + rnd() * 380;
-      // v8: each puff gets its own tinted, slightly rotated material —
-      // the shared flat-gold material is what made banks read as one
-      // yellow smear. Tints drift gold <-> pink so the bank has depth.
+      // v9: each puff gets a tint from a wide palette (gold, pink,
+      // pale, warm brown) with its own opacity and rotation — the v8
+      // banks read as one yellow smear because every sprite shared
+      // nearly the same flat-gold material.
+      const palette = [0xFFD9A0, 0xF0A8A0, 0xFFE9C9, 0xE8B48A, 0xD89A8A, 0xFFF2DD];
       const baseMat = p % 2 ? cloudMat : cloudMat2;
       const mat = baseMat.clone();
-      mat.color.copy(baseMat.color).lerp(
-        new THREE.Color(rnd() > 0.5 ? 0xF0A8A0 : 0xFFE9C9), rnd() * 0.5,
-      );
-      mat.rotation = (rnd() - 0.5) * 0.5;
+      mat.color.setHex(palette[Math.floor(rnd() * palette.length)]);
+      mat.opacity = 0.55 + rnd() * 0.4;
+      mat.rotation = (rnd() - 0.5) * 0.8;
       const s = new THREE.Sprite(mat);
       s.position.set(
         cx + tx * u * span / 2 + (rnd() - 0.5) * 120,
-        cy + (1 - u * u) * 110 + (rnd() - 0.5) * 50,
+        cy + (1 - u * u) * 110 + (rnd() - 0.5) * 70,
         cz + tz * u * span / 2 + (rnd() - 0.5) * 120,
       );
-      s.scale.set(w, w * 0.42, 1);
+      s.scale.set(w, w * (0.42 + rnd() * 0.16), 1);
       clouds.add(s);
     }
   }
