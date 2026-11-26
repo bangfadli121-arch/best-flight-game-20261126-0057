@@ -138,11 +138,13 @@ export function buildSky(scene) {
   dome.name = 'sky-dome';
   group.add(dome);
 
-  // Low sun disc + wide glow, low in the west.
+  // Low sun disc + wide glow, low in the west. v8 (ref 08): the disc
+  // and glow are bigger — in the Ace Combat shot the sun dominates the
+  // upper frame and its haze washes the whole sky gold.
   const sunDir = new THREE.Vector3(-0.82, 0.16, 0.42).normalize();
   const sunPos = sunDir.clone().multiplyScalar(7800);
   const sun = new THREE.Mesh(
-    new THREE.CircleGeometry(300, 40),
+    new THREE.CircleGeometry(420, 40),
     new THREE.MeshBasicMaterial({ color: 0xFFD27A, fog: false }),
   );
   sun.position.copy(sunPos);
@@ -153,7 +155,7 @@ export function buildSky(scene) {
     new THREE.SpriteMaterial({ map: glowTexture(), transparent: true, depthWrite: false, fog: false }),
   );
   glow.position.copy(sunPos);
-  glow.scale.setScalar(4200);
+  glow.scale.setScalar(5200);
   glow.name = 'sun-glow';
   group.add(glow);
 
@@ -165,11 +167,11 @@ export function buildSky(scene) {
   const clouds = new THREE.Group();
   clouds.name = 'clouds';
   const cloudMat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, opacity: 0.92, depthWrite: false,
+    map: tex, transparent: true, opacity: 0.85, depthWrite: false,
     color: 0xFFD9A0, fog: false,
   });
   const cloudMat2 = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, opacity: 0.85, depthWrite: false,
+    map: tex, transparent: true, opacity: 0.8, depthWrite: false,
     color: 0xFFE9C9, fog: false,
   });
   let seed = 7;
@@ -186,7 +188,16 @@ export function buildSky(scene) {
       const u = (p / (puffs - 1)) * 2 - 1; // -1..1 along the bank
       const tx = -Math.sin(az), tz = Math.cos(az); // tangent direction
       const w = 520 + rnd() * 380;
-      const s = new THREE.Sprite(p % 2 ? cloudMat : cloudMat2);
+      // v8: each puff gets its own tinted, slightly rotated material —
+      // the shared flat-gold material is what made banks read as one
+      // yellow smear. Tints drift gold <-> pink so the bank has depth.
+      const baseMat = p % 2 ? cloudMat : cloudMat2;
+      const mat = baseMat.clone();
+      mat.color.copy(baseMat.color).lerp(
+        new THREE.Color(rnd() > 0.5 ? 0xF0A8A0 : 0xFFE9C9), rnd() * 0.5,
+      );
+      mat.rotation = (rnd() - 0.5) * 0.5;
+      const s = new THREE.Sprite(mat);
       s.position.set(
         cx + tx * u * span / 2 + (rnd() - 0.5) * 120,
         cy + (1 - u * u) * 110 + (rnd() - 0.5) * 50,
