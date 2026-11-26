@@ -132,18 +132,24 @@ const C = {
   paddyC: new THREE.Color(0x558B2F),
   paddyRipe: new THREE.Color(0xC0CA33),
   paddyDark: new THREE.Color(0x3E7D2E),
-  // Flooded terrace: warm gold that catches the sunset like a mirror.
-  paddyWater: new THREE.Color(0xFFAA55),
-  // Young seedlings: pale fresh green.
-  paddyYoung: new THREE.Color(0x9CCC65),
+  // Flooded terrace (ref 05 Sapa): the water mirrors the SKY, so it is
+  // bright silver-blue, almost white-blue — never dull orange. The
+  // orange "mirror" is what made the hills read as painted blocks.
+  paddyWater: new THREE.Color(0xEAF6FC),
+  paddyWaterDeep: new THREE.Color(0xA8D4E8),
+  // Young seedlings: saturated fresh green (the old pale green washed
+  // out to olive under the warm sunset light).
+  paddyYoung: new THREE.Color(0x7CB342),
   // Volcano vegetation zones: dense forest floor, dry savanna.
   forestFloor: new THREE.Color(0x2D5A27),
   savanna: new THREE.Color(0x9A8C4A),
   bund: new THREE.Color(0x5D4037),
-  rockDark: new THREE.Color(0x4E342E),
-  rock: new THREE.Color(0x6D4C41),
-  ash: new THREE.Color(0x6D4C41),
+  bundGold: new THREE.Color(0xC89B5A),
+  rockDark: new THREE.Color(0x33261F),
+  rock: new THREE.Color(0x5D4A44),
+  ash: new THREE.Color(0x8A7A6E),
   snow: new THREE.Color(0xF2F4F6),
+  volcanoWarm: new THREE.Color(0xC97B4A),
 };
 
 // Deterministic hash of one paddy cell, so a cell keeps one flat colour.
@@ -160,6 +166,27 @@ function volcanoInfo(x, z) {
   return { d: Math.sqrt(dx * dx + dz * dz), ang: Math.atan2(dz, dx) };
 }
 
+// Terrace bands that FOLLOW THE CONTOUR (ref 04/05): the pattern key is
+// the stepped height, not a square grid — a band is one 8 m height step,
+// so its edges are the contour lines themselves and curve with the
+// hillside the way real terraces do. Along the contour the band is cut
+// into ~45 m plots (polar angle * radius), so plots are small, numerous
+// and curved, never a chessboard. Shared by the colour map and by the
+// mirror quads so water plots and mirrors agree on where the water is.
+function paddyBand(x, z, h) {
+  const tb = Math.floor(h / 12);
+  const r = Math.sqrt(x * x + z * z);
+  const ang = Math.atan2(z, x);
+  const along = (ang * r) / 60; // plots along the contour, ~60 m each
+  const seg = Math.floor(along);
+  return {
+    tb, seg,
+    ph: cellHash(tb * 7 + 13, seg * 3 + 5),
+    frac: (h - tb * 12) / 12,        // 0..1 across the band (riser at the edges)
+    segFrac: along - seg,            // 0..1 along the contour within a plot
+  };
+}
+
 // Colours are FLAT per patch: every vertex inside one paddy cell gets the
 // cell's colour, with no per-vertex noise lerp — that lerp was what made
 // the hills read as blurry gradients from the air. Edges are hard: a
@@ -173,28 +200,29 @@ function terrainColour(x, z, h, slope) {
   }
   if (h < 150) {
     if (slope > 0.75) { col.copy(C.rock); return col; }
-    // Rice-terrace patchwork: 75 m square cells, one solid colour each,
-    // dark bund lines on the cell borders. 75 is a multiple of the 18.75 m
-    // vertex spacing, so borders land exactly on vertices.
-    // Planting phase per cell: flooded (mirror sky), young seedlings,
-    // deep green, golden ripe — a hillside at four stages of the season.
-    // Water is only one cell in five: the mirror plots must sparkle
-    // among the green, not drown the hillside in orange.
-    const CELL = 75;
-    const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
-    const ch = cellHash(cx, cz);
+    // Rice-terrace patchwork (ref 04/05): contour bands, one solid
+    // colour each, with dark bund lines on the band edges (the terrace
+    // risers) and thin bunds between plots along the contour. Planting
+    // phase per plot: flooded (sky mirror — bright silver-blue),
+    // young seedlings, deep green, golden ripe. Water is three plots
+    // in ten: the mirror plots must sparkle among the green, bright
+    // enough to read as water from the air.
+    const b = paddyBand(x, z, h);
     let base;
-    if (ch < 0.20) base = C.paddyWater;
-    else if (ch < 0.50) base = C.paddyYoung;
-    else if (ch < 0.80) base = C.paddyDark;
+    if (b.ph < 0.35) base = C.paddyWater;
+    else if (b.ph < 0.63) base = C.paddyYoung;
+    else if (b.ph < 0.88) base = C.paddyDark;
     else base = C.paddyRipe;
     col.copy(base);
-    // Brightness jitter per cell, never per vertex.
-    col.multiplyScalar(0.95 + cellHash(cx + 911, cz + 733) * 0.1);
-    const fx = (((x % CELL) + CELL) % CELL);
-    const fz = (((z % CELL) + CELL) % CELL);
-    const edge = Math.min(fx, CELL - fx, fz, CELL - fz);
-    if (edge < 7) col.lerp(C.bund, 0.55);
+    // Brightness jitter per plot, never per vertex.
+    col.multiplyScalar(0.94 + cellHash(b.tb + 911, b.seg + 733) * 0.12);
+    // Bund at the band edges (risers): dark brown-gold, hard edge.
+    const edge = Math.min(b.frac, 1 - b.frac);
+    if (edge < 0.10) col.lerp(C.bund, 0.6);
+    else if (edge < 0.22) col.lerp(C.bundGold, 0.15);
+    // Thin bund between plots along the contour.
+    const sEdge = Math.min(b.segFrac, 1 - b.segFrac);
+    if (sEdge < 0.05) col.lerp(C.bund, 0.4);
     return col;
   }
   // High ground: the volcano is zoned by height — dense forest on the
@@ -213,8 +241,19 @@ function terrainColour(x, z, h, slope) {
       col.multiplyScalar(0.9 + cellHash(Math.floor(x / 18.75) + 5, Math.floor(z / 18.75)) * 0.2);
       return col;
     }
-    const stripe = Math.floor(v.ang * 9 + valueNoise(x * 0.01 + 5, z * 0.01 + 5) * 2.2);
-    col.copy(stripe % 2 === 0 ? C.ash : C.rockDark);
+    // Bare rock (ref 06): erosion gullies — strong angular striping
+    // down the cone (the soft sine wash read as one flat brown mound),
+    // with fine gully modulation on top, plus LONG shadows: the
+    // cone's west face catches the low sun warm, the east face falls
+    // into cool shadow, so the mountain has relief instead of paint.
+    const stripe = Math.floor(v.ang * 28 + valueNoise(x * 0.01 + 5, z * 0.01 + 5) * 2.0);
+    col.copy(C.ash).lerp(C.rockDark, stripe % 2 === 0 ? 0.15 : 0.85);
+    const gully = 0.5 + 0.5 * Math.sin(v.ang * 60 + valueNoise(x * 0.02 + 11, z * 0.02 + 7) * 4.0);
+    col.multiplyScalar(0.75 + 0.35 * gully);
+    const rx = (x + 1700) / Math.max(1, v.d), rz = (z + 1500) / Math.max(1, v.d);
+    const sunFace = rx * -0.89 + rz * 0.46; // dot with the sun's horizontal dir
+    col.multiplyScalar(0.85 + 0.15 * (sunFace * 0.5 + 0.5));
+    if (sunFace > 0.25) col.lerp(C.volcanoWarm, 0.04 * sunFace);
     col.multiplyScalar(0.86 + cellHash(Math.floor(x / 18.75), Math.floor(z / 18.75)) * 0.28);
     const snowline = 380 + valueNoise(x * 0.008 + 13, z * 0.008 + 29) * 45;
     if (h > snowline) col.copy(C.snow);
@@ -265,7 +304,8 @@ function detailTexture() {
   return tex;
 }
 
-// Sea bump: soft noise that breaks the flat mirror into a glitter path.
+// Sea bump: fine wave texture everywhere (ref 10) — small ripples plus
+// a larger swell — so the water reads as real sea, not a flat mirror.
 // Without it the low sun paints one solid spotlight beam on the water;
 // with it the glint shatters into sparkles, the way real water does.
 function seaBumpTexture() {
@@ -276,20 +316,32 @@ function seaBumpTexture() {
   g.fillRect(0, 0, 256, 256);
   let seed = 777;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  for (let i = 0; i < 900; i++) {
+  // Broad swell first (big soft blobs), then fine ripples on top.
+  for (let i = 0; i < 60; i++) {
+    const v = 112 + Math.floor(rnd() * 32);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 26 + rnd() * 30);
+    grad.addColorStop(0, `rgba(${v},${v},${v},0.35)`);
+    grad.addColorStop(1, `rgba(${v},${v},${v},0)`);
+    g.save();
+    g.translate(rnd() * 256, rnd() * 256);
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(0, 0, 26 + rnd() * 30, 0, Math.PI * 2); g.fill();
+    g.restore();
+  }
+  for (let i = 0; i < 1400; i++) {
     const v = 96 + Math.floor(rnd() * 64);
-    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 6 + rnd() * 14);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 4 + rnd() * 10);
     grad.addColorStop(0, `rgba(${v},${v},${v},0.5)`);
     grad.addColorStop(1, `rgba(${v},${v},${v},0)`);
     g.save();
     g.translate(rnd() * 256, rnd() * 256);
     g.fillStyle = grad;
-    g.beginPath(); g.arc(0, 0, 6 + rnd() * 14, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(0, 0, 4 + rnd() * 10, 0, Math.PI * 2); g.fill();
     g.restore();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(24, 24);
+  tex.repeat.set(40, 40);
   return tex;
 }
 
@@ -375,10 +427,13 @@ export function buildTerrain(scene) {
   seaGeo.rotateX(-Math.PI / 2);
   const spos = seaGeo.attributes.position;
   const seaCols = new Float32Array(spos.count * 3);
-  const near = new THREE.Color(0x2EC4B6), far = new THREE.Color(0x12808F);
+  const near = new THREE.Color(0x35D0C0), far = new THREE.Color(0x1E9AA8);
   for (let i = 0; i < spos.count; i++) {
-    const r = Math.sqrt(spos.getX(i) ** 2 + spos.getZ(i) ** 2) / 9500;
+    const x = spos.getX(i), z = spos.getZ(i);
+    const r = Math.sqrt(x * x + z * z) / 9500;
     tmp.copy(near).lerp(far, Math.min(1, r * 1.4));
+    // Fine streak variation (ref 10): the sea is never one flat tone.
+    tmp.multiplyScalar(0.98 + valueNoise(x * 0.02, z * 0.02) * 0.08);
     seaCols[i * 3] = tmp.r; seaCols[i * 3 + 1] = tmp.g; seaCols[i * 3 + 2] = tmp.b;
   }
   seaGeo.setAttribute('color', new THREE.BufferAttribute(seaCols, 3));
@@ -386,8 +441,8 @@ export function buildTerrain(scene) {
     seaGeo,
     new THREE.MeshPhongMaterial({
       vertexColors: true, transparent: true, opacity: 0.96,
-      shininess: 260, specular: 0x8A5A2A,
-      bumpMap: seaBumpTexture(), bumpScale: 0.35,
+      shininess: 260, specular: 0x8A5A2A, emissive: 0x062226,
+      bumpMap: seaBumpTexture(), bumpScale: 0.5,
     }),
   );
   sea.position.y = 0.4;
@@ -911,48 +966,37 @@ function buildBoulders(group) {
   group.add(inst);
 }
 
-// Flooded terraces that actually mirror the sky: thin reflective quads
-// laid along the contour treads of water-filled paddy cells, so the
-// sunset glints on real water instead of orange paint alone.
+// Flooded terraces that actually mirror the sky (ref 05): thin
+// reflective quads laid on water-phase contour bands, so the sunset
+// glints on real silver-blue water instead of orange paint. Uses the
+// same paddyBand phase as the colour map, so mirrors sit exactly on
+// the bright water plots.
 function buildTerraceMirrors(group) {
   const mat = new THREE.MeshPhongMaterial({
-    color: 0xFF8A3D, emissive: 0x531E00, emissiveIntensity: 0.5,
-    specular: 0xFFD9A0, shininess: 240, transparent: true, opacity: 0.55,
+    color: 0xBFE3F2, emissive: 0x1A2E3A, emissiveIntensity: 0.4,
+    specular: 0xFFFFFF, shininess: 300, transparent: true, opacity: 0.8,
   });
-  const geo = new THREE.PlaneGeometry(36, 9);
+  const geo = new THREE.PlaneGeometry(44, 11);
   let placed = 0;
-  for (let cz = 6; cz <= 11 && placed < 12; cz++) {
-    for (let cx = 1; cx <= 9 && placed < 12; cx++) {
-      if (cellHash(cx, cz) >= 0.20) continue; // only water-phase cells
-      const x0 = cx * 75 + 37.5, z0 = cz * 75 + 37.5;
-      // Nudge onto the tread centre: sample until the raw height is
-      // close to the stepped height, so the quad lies flat on one tread.
-      let bx = x0, bz = z0, ok = false;
-      for (let k = 0; k < 12 && !ok; k++) {
-        const gx = x0 + (k % 4 - 1.5) * 9;
-        const gz = z0 + (Math.floor(k / 4) - 1) * 9;
-        const h = terrainHeight(gx, gz);
-        const hq = Math.floor(h / 4) * 4 + 2;
-        if (Math.abs(h - hq) < 1.2 && h > 10 && h < 120) { bx = gx; bz = gz; ok = true; }
-      }
-      if (!ok) continue;
-      const h = terrainHeight(bx, bz);
-      const hx = terrainHeight(bx + 6, bz) - h;
-      const hz = terrainHeight(bx, bz + 6) - h;
-      // Quad lies along the contour (perpendicular to the gradient).
+  for (let gx = 0; gx <= 800 && placed < 36; gx += 30) {
+    for (let gz = 0; gz <= 800 && placed < 36; gz += 30) {
+      const h = terrainHeight(gx, gz);
+      if (h < 10 || h > 120) continue;
+      if (paddyBand(gx, gz, h).ph >= 0.35) continue; // only water-phase plots
+      const hx = terrainHeight(gx + 6, gz) - h;
+      const hz = terrainHeight(gx, gz + 6) - h;
       const grad = new THREE.Vector3(hx, 0, hz);
-      const n = new THREE.Vector3(0, 1, 0);
-      if (grad.lengthSq() > 1e-6) {
-        const t = new THREE.Vector3(-hz, 0, hx).normalize();
-        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), t);
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(bx, h + 0.35, bz);
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.quaternion.multiplyQuaternions(q, mesh.quaternion);
-        mesh.name = 'terrace-water';
-        group.add(mesh);
-        placed++;
-      }
+      if (grad.lengthSq() < 1e-6) continue;
+      // Quad lies along the contour (perpendicular to the gradient).
+      const t = new THREE.Vector3(-hz, 0, hx).normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), t);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(gx, h + 0.35, gz);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.quaternion.multiplyQuaternions(q, mesh.quaternion);
+      mesh.name = 'terrace-water';
+      group.add(mesh);
+      placed++;
     }
   }
 }
