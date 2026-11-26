@@ -487,11 +487,19 @@ export class Hud {
     g.clearRect(0, 0, w, h);
     const pad = 14;
 
-    // ---- top-left: ALT / SPD / HDG --------------------------------------
-    const lw = 150 * s + 46, lh = 140 * s + 22;
+    // ---- top-left: aircraft + ALT / SPD / HDG ---------------------------
+    const lw = 150 * s + 46, lh = 158 * s + 22;
     this.panel(pad, pad, lw, lh);
-    this.label(pad + 12, pad + 20, 'ALTITUDE');
-    this.value(pad + 12, pad + 44, `${Math.round(state.alt)} m`, 22 * s + 6);
+    g.save();
+    g.shadowColor = GOLD;
+    g.shadowBlur = 7;
+    g.fillStyle = GOLD;
+    g.font = `800 ${13 * s + 4}px system-ui, sans-serif`;
+    g.textAlign = 'left';
+    g.fillText('F-22 RAPTOR', pad + 12, pad + 20);
+    g.restore();
+    this.label(pad + 12, pad + 38, 'ALTITUDE');
+    this.value(pad + 12, pad + 62, `${Math.round(state.alt)} m`, 22 * s + 6);
     // Vertical-speed trend arrow beside the altitude.
     if (state.vspeed !== undefined) {
       const vs = state.vspeed;
@@ -500,19 +508,19 @@ export class Hud {
       g.fillStyle = col;
       g.font = `700 ${13 * s + 3}px system-ui, sans-serif`;
       g.textAlign = 'right';
-      g.fillText(arrow, pad + lw - 12, pad + 40);
+      g.fillText(arrow, pad + lw - 12, pad + 58);
       g.textAlign = 'left';
     }
-    this.label(pad + 12, pad + 64, 'SPEED');
-    this.value(pad + 12, pad + 88, `${Math.round(state.speedKmh)} km/h`, 22 * s + 6);
-    this.label(pad + 12, pad + 108, 'HEADING');
-    this.value(pad + 12, pad + 132, `${String(Math.round(state.heading)).padStart(3, '0')}°`, 22 * s + 6);
+    this.label(pad + 12, pad + 82, 'SPEED');
+    this.value(pad + 12, pad + 106, `${Math.round(state.speedKmh)} km/h`, 22 * s + 6);
+    this.label(pad + 12, pad + 126, 'HEADING');
+    this.value(pad + 12, pad + 150, `${String(Math.round(state.heading)).padStart(3, '0')}°`, 22 * s + 6);
 
     // ---- top-centre: compass tape ----------------------------------------
     this.drawCompass(w / 2, pad, 340 * s + 60, state.heading);
 
     // ---- top-right: score / rings / time + bars ---------------------------
-    const rw = 218 * s + 40, rh = 132 * s + 30;
+    const rw = 218 * s + 40, rh = 150 * s + 30;
     const rx = w - pad - rw;
     this.panel(rx, pad, rw, rh);
     this.label(rx + 12, pad + 20, 'SCORE');
@@ -528,6 +536,22 @@ export class Hud {
     this.bar(rx + 52, pad + 123, rw - 64, 9, state.fuel / 100, state.fuel < 25 ? RED : GREEN);
     this.label(rx + 12, pad + 150, 'DMG');
     this.bar(rx + 52, pad + 141, rw - 64, 9, state.damage / 100, state.damage > 60 ? RED : '#FFB300');
+    // Afterburner badge: lit orange while the burners are on.
+    if (state.afterburner) {
+      g.save();
+      g.shadowColor = '#FF7A18';
+      g.shadowBlur = 10;
+      g.fillStyle = '#FF7A18';
+      g.beginPath();
+      g.roundRect(rx + 12, pad + 158, 118, 18, 9);
+      g.fill();
+      g.restore();
+      g.fillStyle = '#1A0E00';
+      g.font = '800 12px system-ui, sans-serif';
+      g.textAlign = 'center';
+      g.fillText('AB — AFTERBURNER', rx + 12 + 59, pad + 171);
+      g.textAlign = 'left';
+    }
 
     // ---- centre-top pill: next ring + bearing arrow -----------------------
     if (state.nextRingLabel) {
@@ -564,7 +588,7 @@ export class Hud {
     const dx = pad + 170 * s + 20;
     const dr = 34 * s + 8;
     this.dial(dx, cy, dr, state.alt / 600, `${Math.round(state.alt)}`, 'ALT m');
-    this.dial(dx + dr * 2 + 26, cy, dr, state.speedKmh / 350, `${Math.round(state.speedKmh)}`, 'SPD km/h');
+    this.dial(dx + dr * 2 + 26, cy, dr, state.speedKmh / 1300, `${Math.round(state.speedKmh)}`, 'SPD km/h');
     this.dial(dx + (dr * 2 + 26) * 2, cy, dr, state.heading / 360, `${String(Math.round(state.heading)).padStart(3, '0')}°`, 'HDG');
     // Vertical throttle bar, glass style.
     const tx = dx + (dr * 2 + 26) * 3 + 10;
