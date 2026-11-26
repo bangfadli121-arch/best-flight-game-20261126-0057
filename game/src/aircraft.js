@@ -157,11 +157,23 @@ function wingPanel(mat, x0, x1, chordRoot, chordTip, thickness = 0.14) {
   shape.lineTo(x0, c0);
   shape.closePath();
   const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: thickness, bevelEnabled: true, bevelThickness: 0.09,
-    bevelSize: 0.09, bevelSegments: 4, curveSegments: 16,
+    depth: thickness, bevelEnabled: true, bevelThickness: 0.12,
+    bevelSize: 0.12, bevelSegments: 4, curveSegments: 16,
   });
   geo.rotateX(Math.PI / 2); // chord -> Z, thickness -> Y
   geo.translate(0, thickness / 2 + 0.05, 0);
+  // Airfoil camber: crown the upper skin so the wing reads as a curved
+  // aerofoil from behind, not a flat plate (ref 02). Chord tapers from
+  // chordRoot at x0 to chordTip at x1; the crown peaks mid-chord.
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    const s = Math.max(0, Math.min(1, (Math.abs(x) - x0) / Math.max(0.01, x1 - x0)));
+    const half = (chordRoot + (chordTip - chordRoot) * s) / 2;
+    const u = Math.max(-1, Math.min(1, z / Math.max(0.01, half)));
+    pos.setY(i, pos.getY(i) + 0.12 * Math.max(0, 1 - u * u));
+  }
+  geo.computeVertexNormals();
   return new THREE.Mesh(geo, mat);
 }
 
@@ -334,16 +346,16 @@ export function buildAircraft() {
   // v8 lighting is kept exactly (cool fill keeps the top grey, warm rim
   // lights the edges); only the geometry and the panel texture change.
   const stealth = new THREE.MeshStandardMaterial({ color: 0x6E7680, metalness: 0.45, roughness: 0.42 });
-  const stealthTop = new THREE.MeshStandardMaterial({ map: panelTexture(), color: 0xC9D2DC, metalness: 0.30, roughness: 0.50 });
+  const stealthTop = new THREE.MeshStandardMaterial({ map: panelTexture(), color: 0xBFC9D4, metalness: 0.30, roughness: 0.55 });
   // Wing skin: the subtle texture above — no grid on the flat wings.
-  const wingTop = new THREE.MeshStandardMaterial({ map: wingTexture(), color: 0xD2D9E0, metalness: 0.30, roughness: 0.48 });
+  const wingTop = new THREE.MeshStandardMaterial({ map: wingTexture(), color: 0xC6CED8, metalness: 0.30, roughness: 0.55 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x3A4048, metalness: 0.6, roughness: 0.45 });
   const nozzleMat = new THREE.MeshStandardMaterial({ color: 0x2A2E33, metalness: 0.85, roughness: 0.35 });
   const nozzleRingMat = new THREE.MeshStandardMaterial({ color: 0x9AA0A8, metalness: 0.9, roughness: 0.3 });
   const emberTex = emberTexture();
   const glass = new THREE.MeshStandardMaterial({
-    color: 0xC9962E, metalness: 0.95, roughness: 0.12,
-    emissive: 0x7A4A10, emissiveIntensity: 0.55,
+    color: 0xC9962E, metalness: 0.95, roughness: 0.08,
+    emissive: 0x7A4A10, emissiveIntensity: 0.7,
   });
   const tyre = new THREE.MeshStandardMaterial({ color: 0x1E1E1E, roughness: 0.95 });
   const hubMat = new THREE.MeshStandardMaterial({ color: 0xB0BEC5, metalness: 0.8, roughness: 0.3 });
@@ -354,15 +366,15 @@ export function buildAircraft() {
   // it is a tall body between the wings, with the canopy rising above it.
   const FUSELAGE_STATIONS = [
     { z: 5.4, y: 0.00, w: 0.03, ht: 0.03, hb: 0.03 }, // nose tip
-    { z: 4.8, y: 0.02, w: 0.22, ht: 0.20, hb: 0.18 },
-    { z: 4.0, y: 0.05, w: 0.45, ht: 0.38, hb: 0.32 },
-    { z: 3.0, y: 0.05, w: 0.68, ht: 0.58, hb: 0.48 },
-    { z: 1.8, y: 0.02, w: 0.88, ht: 0.75, hb: 0.58 },
-    { z: 0.5, y: 0.00, w: 1.05, ht: 0.85, hb: 0.65 },
-    { z: -1.2, y: 0.00, w: 1.02, ht: 0.80, hb: 0.62 },
-    { z: -2.8, y: -0.02, w: 0.92, ht: 0.66, hb: 0.52 },
-    { z: -4.2, y: -0.05, w: 0.80, ht: 0.50, hb: 0.38 },
-    { z: -5.0, y: -0.05, w: 0.72, ht: 0.42, hb: 0.32 }, // tail face
+    { z: 4.8, y: 0.02, w: 0.24, ht: 0.22, hb: 0.20 },
+    { z: 4.0, y: 0.05, w: 0.50, ht: 0.42, hb: 0.36 },
+    { z: 3.0, y: 0.06, w: 0.74, ht: 0.64, hb: 0.52 },
+    { z: 1.8, y: 0.03, w: 0.96, ht: 0.82, hb: 0.66 },
+    { z: 0.5, y: 0.02, w: 1.16, ht: 0.95, hb: 0.76 },
+    { z: -1.2, y: 0.02, w: 1.13, ht: 0.90, hb: 0.72 },
+    { z: -2.8, y: 0.00, w: 1.00, ht: 0.74, hb: 0.60 },
+    { z: -4.2, y: -0.03, w: 0.86, ht: 0.56, hb: 0.44 },
+    { z: -5.0, y: -0.03, w: 0.78, ht: 0.48, hb: 0.38 }, // tail face
   ];
   // The fuselage gets its own panel-texture instance: the loft's UVs run
   // u = around the ring, v = along the body, so repeat (1,1) puts the
@@ -370,16 +382,22 @@ export function buildAircraft() {
   const fuseTex = panelTexture();
   fuseTex.repeat.set(1, 1);
   fuseTex.offset.set(0, 0);
-  const fuselageMat = new THREE.MeshStandardMaterial({ map: fuseTex, color: 0xC9D2DC, metalness: 0.30, roughness: 0.50 });
+  const fuselageMat = new THREE.MeshStandardMaterial({ map: fuseTex, color: 0xBFC9D4, metalness: 0.30, roughness: 0.55 });
   const fuselage = new THREE.Mesh(fuselageGeometry(interpStations(FUSELAGE_STATIONS)), fuselageMat);
   fuselage.name = 'fuselage';
   group.add(fuselage);
+
+  // Dorsal spine: a low raised fairing along the fuselage top from the
+  // canopy to the tail — the centreline volume that reads from behind.
+  const spine = new THREE.Mesh(roundedDuctGeometry(0.55, 0.34, 4.6, 0.15), stealthTop);
+  spine.position.set(0, 0.88, -1.6);
+  group.add(spine);
 
   // Main delta wings: separate panels, low-mounted on the fuselage
   // (y -0.22, below the body centreline), slight anhedral, blended into
   // the fuselage sides. The wing is one part — the body is the other.
   for (const side of [-1, 1]) {
-    const wing = wingPanel(wingTop, 0.55, 3.6, 6.0, 1.2, 0.26);
+    const wing = wingPanel(wingTop, 0.55, 3.6, 6.0, 1.2, 0.32);
     wing.position.set(0, -0.22, -0.6);
     wing.rotation.z = -0.05; // slight anhedral
     if (side < 0) wing.rotation.y = Math.PI;
@@ -402,10 +420,17 @@ export function buildAircraft() {
   // like the real Raptor's canopy in ref 02 (the v9 bubble sat proud
   // like a gold ball on top of the fuselage).
   const canopy = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), glass);
-  canopy.scale.set(0.52, 0.36, 1.6);
-  canopy.position.set(0, 0.74, 1.8);
+  canopy.scale.set(0.58, 0.44, 1.9);
+  canopy.position.set(0, 0.78, 1.7);
   canopy.name = 'canopy';
   group.add(canopy);
+  // Canopy frame: a dark flattened ring the gold bubble sits in, so the
+  // canopy reads as a framed cockpit, not a ball on the fuselage.
+  const coaming = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.11, 10, 32), dark);
+  coaming.rotation.x = Math.PI / 2;
+  coaming.scale.set(0.62, 1.7, 0.4);
+  coaming.position.set(0, 0.86, 1.7);
+  group.add(coaming);
 
   // Canted twin tails: tall swept fins leaning out ~28 degrees, the
   // Raptor's signature. Taller than v8 (2.15 m) so they read from behind.
@@ -418,8 +443,8 @@ export function buildAircraft() {
   finShape.lineTo(-1.2, 0.7);
   finShape.closePath();
   const finGeo = new THREE.ExtrudeGeometry(finShape, {
-    depth: 0.2, bevelEnabled: true, bevelThickness: 0.06,
-    bevelSize: 0.06, bevelSegments: 4, curveSegments: 12,
+    depth: 0.3, bevelEnabled: true, bevelThickness: 0.08,
+    bevelSize: 0.08, bevelSegments: 4, curveSegments: 12,
   });
   finGeo.rotateY(-Math.PI / 2); // chord -> Z, leading edge toward the nose
   finGeo.translate(-0.07, 0, 0); // centre the thickness on the local origin
@@ -429,6 +454,7 @@ export function buildAircraft() {
     tail.position.set(side * 0.85, 0.45, -3.4);
     tail.rotation.z = -side * 0.5; // cant outward ~28 deg
     const fin = new THREE.Mesh(finGeo, stealth);
+    fin.scale.set(1.08, 1.08, 1.2);
     tail.add(fin);
     // "RAPTOR" + tail number on the outer face of the fin.
     const decal = new THREE.Mesh(
@@ -436,7 +462,7 @@ export function buildAircraft() {
       new THREE.MeshBasicMaterial({ map: decalTex, transparent: true, side: THREE.DoubleSide }),
     );
     decal.userData.noShadow = true;
-    decal.position.set(side * 0.12, 1.1, 0);
+    decal.position.set(side * 0.25, 1.1, 0);
     decal.rotation.y = side * Math.PI / 2;
     tail.add(decal);
     group.add(tail);
@@ -458,19 +484,19 @@ export function buildAircraft() {
   // a rounded-rect extrude with a bevel, so every edge is soft.
   const mouthMat = new THREE.MeshBasicMaterial({ color: 0x0A0C0E });
   for (const side of [-1, 1]) {
-    const duct = new THREE.Mesh(roundedDuctGeometry(0.62, 1.0, 2.4, 0.22), dark);
-    duct.position.set(side * 1.18, 0.02, 1.35);
+    const duct = new THREE.Mesh(roundedDuctGeometry(0.72, 1.12, 2.5, 0.26), dark);
+    duct.position.set(side * 1.26, 0.02, 1.35);
     duct.name = 'intake';
     group.add(duct);
-    const mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.88), mouthMat);
+    const mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 1.0), mouthMat);
     mouth.userData.noShadow = true;
-    mouth.position.set(side * 1.18, 0.02, 2.56);
+    mouth.position.set(side * 1.26, 0.02, 2.61);
     group.add(mouth);
     // Ramp lip: a flattened half-cylinder, rounded, not a slab.
-    const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.5, 16), stealth);
+    const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.5, 16), stealth);
     lip.rotation.x = Math.PI / 2 - 0.25; // axis along Z, tilted like a ramp
     lip.scale.set(1, 1, 0.35);
-    lip.position.set(side * 1.18, 0.55, 2.35);
+    lip.position.set(side * 1.26, 0.55, 2.4);
     group.add(lip);
   }
 
@@ -482,25 +508,25 @@ export function buildAircraft() {
   const emberMat = new THREE.MeshBasicMaterial({ map: emberTex });
   const embers = [];
   for (const side of [-1, 1]) {
-    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.42, 0.9, 20), nozzleMat);
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.50, 1.0, 24), nozzleMat);
     nozzle.rotation.x = Math.PI / 2; // axis along Z
     nozzle.scale.set(1, 1, 0.72); // slightly flattened oval
-    nozzle.position.set(side * 0.55, -0.05, -4.85);
+    nozzle.position.set(side * 0.58, -0.05, -4.85);
     group.add(nozzle);
     // Flared petal ring at the nozzle exit: a short open cone, metallic.
     const petal = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.29, 0.34, 0.28, 16, 1, true),
+      new THREE.CylinderGeometry(0.36, 0.42, 0.32, 24, 1, true),
       new THREE.MeshStandardMaterial({ color: 0x6E7278, metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide }),
     );
     petal.rotation.x = Math.PI / 2;
-    petal.position.set(side * 0.55, -0.05, -5.32);
+    petal.position.set(side * 0.58, -0.05, -5.36);
     group.add(petal);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.075, 10, 20), nozzleRingMat);
-    ring.position.set(side * 0.55, -0.05, -5.3);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.37, 0.09, 12, 24), nozzleRingMat);
+    ring.position.set(side * 0.58, -0.05, -5.34);
     group.add(ring);
-    const ember = new THREE.Mesh(new THREE.CircleGeometry(0.28, 20), emberMat);
+    const ember = new THREE.Mesh(new THREE.CircleGeometry(0.36, 24), emberMat);
     ember.rotation.y = Math.PI; // face backward
-    ember.position.set(side * 0.55, -0.05, -5.31);
+    ember.position.set(side * 0.58, -0.05, -5.35);
     ember.userData.noShadow = true;
     group.add(ember);
     embers.push(ember);
@@ -519,7 +545,7 @@ export function buildAircraft() {
   group.add(abLight);
   for (const side of [-1, 1]) {
     const fg = new THREE.Group();
-    fg.position.set(side * 0.55, -0.05, -5.35);
+    fg.position.set(side * 0.58, -0.05, -5.4);
     fg.add(flameCone(0xFF7A18, 0.34, 2.8, 0.42));
     fg.add(flameCone(0xFFD75E, 0.20, 2.0, 0.7));
     fg.add(flameCone(0x66CCFF, 0.10, 1.1, 0.6));
@@ -533,10 +559,19 @@ export function buildAircraft() {
       map: glowTex, color: 0xFF8033, transparent: true, opacity: 0.25,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }));
-    glare.scale.setScalar(1.2);
-    glare.position.set(side * 0.55, -0.05, -5.4);
+    glare.scale.setScalar(1.6);
+    glare.position.set(side * 0.58, -0.05, -5.45);
     group.add(glare);
     flames.push(glare);
+  }
+
+  // Wingtip missile rails: thin rounded rails along each tip chord —
+  // the small hard detail that makes the wing read as built, not cut.
+  for (const side of [-1, 1]) {
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.3, 8), dark);
+    rail.rotation.x = Math.PI / 2;
+    rail.position.set(side * 3.55, -0.18, -0.6);
+    group.add(rail);
   }
 
   // Landing gear: nose + two mains, raked legs, real tyres with hubs.
@@ -567,7 +602,7 @@ export function buildAircraft() {
   pitot.position.set(0.35, 0.1, 4.2);
   group.add(pitot);
   const antenna = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.5, 6), dark);
-  antenna.position.set(0, 0.85, -0.5);
+  antenna.position.set(0, 1.15, -0.5); // on the dorsal spine
   group.add(antenna);
 
   // Navigation lights: red left, green right, white tail — emissive
@@ -622,7 +657,7 @@ export function buildAircraft() {
         const glare = flames[i * 2 + 1];
         glare.visible = true;
         glare.material.opacity = 0.18 + 0.5 * abLevel;
-        glare.scale.setScalar(1.2 + 0.8 * abLevel);
+        glare.scale.setScalar(1.6 + 0.8 * abLevel);
       }
       abLight.intensity = 50 * abLevel;
       emberMat.color.setHex(0xFFFFFF); // full gradient while burning
