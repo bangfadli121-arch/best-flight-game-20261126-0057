@@ -1,5 +1,8 @@
-// aircraft.js — the F-22 RAPTOR. v16: SMOOTH GEOMETRY rebuild, from
-// fadli's own photos (fadli-15b rear, fadli-15c banking, fadli-15a AC7
+// aircraft.js — the F-22 RAPTOR. v17 (AC7 round): gear DELETED (it read
+// as car wheels — "ban"), nose rounded + slimmed, canopy coaming
+// removed, intakes slimmed/blended, chase cam 3/4 (main.js).
+// v16: SMOOTH GEOMETRY rebuild, from fadli's own photos (fadli-15b rear,
+// fadli-15c banking, fadli-15a AC7
 // sunset sea) and his verdict "masih kotak-kotak" / "bikin halus detail
 // 3D dan HD". Fifteen rounds proved recolouring + panel textures never
 // remove the boxy look — the boxy look IS the geometry: the v15
@@ -487,7 +490,7 @@ function loftZGeometry(stations, ringFn, nRing = 32) {
 // chined look (flat-ish top, flat sides, keeled belly) as a SMOOTH
 // curve: no straight segment anywhere.
 function fuselageRing(st, t) {
-  const n = 2.6, e = 2 / n;
+  const n = st.n ?? 2.6, e = 2 / n; // v17: rounder nose (n=2.0 at the tip) — the flat-topped n=2.6 nose read as a box from the front
   const c = Math.cos(t), s = Math.sin(t);
   const x = st.w * Math.sign(c) * Math.pow(Math.abs(c), e);
   const y = st.y + (s >= 0 ? st.ht : st.hb) * Math.sign(s) * Math.pow(Math.abs(s), e);
@@ -526,6 +529,7 @@ function interpStations(stations) {
       out.push({
         z: (a.z + b.z) / 2, y: (a.y + b.y) / 2, w: (a.w + b.w) / 2,
         ht: (a.ht + b.ht) / 2, hb: (a.hb + b.hb) / 2,
+        n: ((a.n ?? 2.6) + (b.n ?? 2.6)) / 2,
       });
     }
   }
@@ -723,8 +727,7 @@ export function buildAircraft() {
     color: 0xD9A83C, metalness: 0.65, roughness: 0.22,
     emissive: 0x8A5A10, emissiveIntensity: 0.6,
   });
-  const tyre = new THREE.MeshStandardMaterial({ color: 0x1E1E1E, roughness: 0.95 });
-  const hubMat = new THREE.MeshStandardMaterial({ color: 0xB0BEC5, metalness: 0.8, roughness: 0.3 });
+  // v17: NO landing-gear materials — the gear is deleted (see below).
 
   // Fuselage: chined loft, nose toward +Z. Stations are {z, y, w, ht, hb}:
   // half-width, top height and belly depth at each station. TRUE F-22
@@ -741,11 +744,11 @@ export function buildAircraft() {
   // stays long and pointed, the tail face stays narrow. Length 12.6 m
   // and span 9.0 m are UNCHANGED.
   const FUSELAGE_STATIONS = [
-    { z: 6.6, y: 0.00, w: 0.02, ht: 0.02, hb: 0.02 }, // nose tip
-    { z: 6.1, y: 0.01, w: 0.14, ht: 0.12, hb: 0.10 },
-    { z: 5.3, y: 0.03, w: 0.32, ht: 0.26, hb: 0.22 },
-    { z: 4.3, y: 0.05, w: 0.55, ht: 0.40, hb: 0.32 },
-    { z: 3.1, y: 0.06, w: 0.78, ht: 0.46, hb: 0.36 },
+    { z: 6.6, y: 0.00, w: 0.02, ht: 0.02, hb: 0.02, n: 2.0 }, // nose tip — round
+    { z: 6.1, y: 0.01, w: 0.13, ht: 0.11, hb: 0.09, n: 2.0 }, // round nose cone
+    { z: 5.3, y: 0.03, w: 0.27, ht: 0.21, hb: 0.18, n: 2.1 }, // slim, round
+    { z: 4.3, y: 0.05, w: 0.50, ht: 0.35, hb: 0.28, n: 2.3 }, // blending to chined
+    { z: 3.1, y: 0.06, w: 0.74, ht: 0.43, hb: 0.34, n: 2.5 },
     { z: 1.9, y: 0.04, w: 0.88, ht: 0.48, hb: 0.36 },
     { z: 0.5, y: 0.02, w: 0.90, ht: 0.48, hb: 0.36 },
     { z: -1.1, y: 0.02, w: 0.86, ht: 0.44, hb: 0.34 },
@@ -828,19 +831,15 @@ export function buildAircraft() {
   canopy.position.set(0, 0.62, 2.7);
   canopy.name = 'canopy';
   group.add(canopy);
-  // Canopy frame: a dark flattened ring the gold bubble sits in, so the
-  // canopy reads as a framed cockpit, not a ball on the fuselage.
-  const coaming = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.08, 10, 32), dark);
-  coaming.rotation.x = Math.PI / 2;
-  coaming.scale.set(0.56, 2.0, 0.5);
-  coaming.position.set(0, 0.60, 2.7);
-  group.add(coaming);
-  // Frame bow across the canopy middle: the hoop the real canopy's
-  // frame makes, so the bubble reads as a framed cockpit from the side.
-  const frameBow = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.035, 8, 24), dark);
-  frameBow.scale.set(1.12, 0.95, 1);
-  frameBow.position.set(0, 0.62, 2.7);
-  group.add(frameBow);
+  // Smooth canopy fairing (v17): the gold bubble emerges from a smooth
+  // fuselage-grey fairing — the v16 dark torus coaming + frame bow read
+  // as a flat plate/box around the canopy base from the chase camera
+  // ("depan kotak-kotak"). No dark ring, no hoop: just the bubble
+  // growing out of the spine.
+  const fairing = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), stealth);
+  fairing.scale.set(0.42, 0.20, 1.45);
+  fairing.position.set(0, 0.52, 2.7);
+  group.add(fairing);
 
   // Canted twin tails: tall but SLIM swept fins leaning out ~28 degrees,
   // the Raptor's signature. The v13 fins were 2.4 m chord slabs that
@@ -896,29 +895,26 @@ export function buildAircraft() {
   const mouthMat = new THREE.MeshBasicMaterial({ color: 0x0A0C0E });
   const intakeDecalTex = intakeDecalTexture();
   for (const side of [-1, 1]) {
-    // v15: intakes move outboard (x ±1.02) — the body is wider now, so
-    // the old ±0.82 ducts would be buried inside the fuselage.
-    const duct = new THREE.Mesh(roundedDuctGeometry(0.5, 0.85, 2.0, 0.22), dark);
-    duct.position.set(side * 1.02, -0.08, 1.7);
+    // v17: slim ramp hugging the fuselage — the v16 full tube + the
+    // half-cylinder "lip" on top read as separate silver tubes strapped
+    // to the body (depan-shot3). The lip is DELETED; the duct is
+    // narrower, sunk inboard and lower so it blends into the fuselage
+    // side instead of standing off it.
+    const duct = new THREE.Mesh(roundedDuctGeometry(0.42, 0.72, 2.0, 0.20), dark);
+    duct.position.set(side * 0.97, -0.12, 1.7);
     duct.name = 'intake';
     group.add(duct);
-    const mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.75), mouthMat);
+    const mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.62), mouthMat);
     mouth.userData.noShadow = true;
-    mouth.position.set(side * 1.02, -0.08, 2.71);
+    mouth.position.set(side * 0.97, -0.12, 2.71);
     group.add(mouth);
-    // Ramp lip: a flattened half-cylinder, rounded, not a slab.
-    const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.4, 16), stealth);
-    lip.rotation.x = Math.PI / 2 - 0.25; // axis along Z, tilted like a ramp
-    lip.scale.set(1, 1, 0.35);
-    lip.position.set(side * 1.02, 0.42, 2.5);
-    group.add(lip);
     // Tail number + DANGER stripe on the intake's flat outer face.
     const dec = new THREE.Mesh(
       new THREE.PlaneGeometry(1.5, 0.34),
       new THREE.MeshBasicMaterial({ map: intakeDecalTex, transparent: false }),
     );
     dec.userData.noShadow = true;
-    dec.position.set(side * 1.28, -0.08, 1.7);
+    dec.position.set(side * 1.19, -0.12, 1.7);
     dec.rotation.y = side * Math.PI / 2;
     group.add(dec);
   }
@@ -988,7 +984,7 @@ export function buildAircraft() {
   // photo) instead of a black silhouette. A point light, not a
   // directional: its falloff (distance 45) means it lights the jet and
   // almost nothing else — the terrain 100+ m away is untouched.
-  const chaseFill = new THREE.PointLight(0xFFC08A, 42, 45, 1.5); // v16b: 55 blew a white specular disc onto the smooth spine; 42 keeps the tail readable without the hotspot
+  const chaseFill = new THREE.PointLight(0xFFC08A, 48, 45, 1.5); // v17: 48 — the 3/4 camera sees more flank, so the fill rises a touch (v16b's 55 blew a white specular disc onto the smooth spine; stay below it)
   chaseFill.position.set(0, -1.5, -10);
   group.add(chaseFill);
   for (const side of [-1, 1]) {
@@ -1022,27 +1018,10 @@ export function buildAircraft() {
     group.add(rail);
   }
 
-  // Landing gear: nose + two mains, raked legs, real tyres with hubs.
-  for (const side of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 8), dark);
-    leg.position.set(side * 1.15, -0.85, -0.8);
-    leg.rotation.z = side * 0.25;
-    group.add(leg);
-    const wheel = new THREE.Group();
-    wheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.30, 0.11, 10, 18), tyre));
-    const hubDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.28, 14), hubMat);
-    hubDisc.rotation.x = Math.PI / 2;
-    wheel.add(hubDisc);
-    wheel.position.set(side * 1.28, -1.25, -0.8);
-    group.add(wheel);
-  }
-  const noseLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 8), dark);
-  noseLeg.position.set(0, -0.78, 3.8);
-  group.add(noseLeg);
-  const noseWheel = new THREE.Group();
-  noseWheel.add(new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.08, 10, 16), tyre));
-  noseWheel.position.set(0, -1.15, 3.8);
-  group.add(noseWheel);
+  // v17: NO LANDING GEAR. The gear (dark tyre tori + light hub discs
+  // hanging below the fuselage at y -1.25) read as CAR WHEELS ("ban")
+  // from the chase camera. A jet in flight flies clean: gear retracted,
+  // nothing below the belly. Deleted outright, never to return.
 
   // Pitot tube on the nose + antenna mast on the spine.
   const pitot = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.7, 6), dark);
