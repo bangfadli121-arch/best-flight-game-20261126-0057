@@ -3,6 +3,8 @@
 // island dressing (trees, huts, buoys). Nothing here touches the aircraft.
 
 import * as THREE from 'three';
+import { Water } from 'three/addons/objects/Water.js';
+import { SUN_DIR } from './sky.js';
 
 // ------------------------------------------------------------------ islands
 // Every island is a smooth bump. The big one (index 1) is the volcano.
@@ -432,114 +434,11 @@ function groundTexture() {
 // The fine ripples are HIGH contrast and dense: they are the micro-facets
 // that shatter the sun glint into sparkles (ref 08) instead of one
 // smooth beam. Bright specks are the glitter points themselves.
-function seaBumpTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const g = c.getContext('2d');
-  g.fillStyle = '#808080';
-  g.fillRect(0, 0, 256, 256);
-  let seed = 777;
-  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  // Broad swell first (big soft blobs), then fine ripples on top.
-  for (let i = 0; i < 46; i++) {
-    const v = 112 + Math.floor(rnd() * 32);
-    const r = 26 + rnd() * 30;
-    const grad = g.createRadialGradient(0, 0, 0, 0, 0, r);
-    grad.addColorStop(0, `rgba(${v},${v},${v},0.35)`);
-    grad.addColorStop(1, `rgba(${v},${v},${v},0)`);
-    g.save();
-    g.translate(rnd() * 256, rnd() * 256);
-    g.fillStyle = grad;
-    g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fill();
-    g.restore();
-  }
-  for (let i = 0; i < 3200; i++) {
-    const v = 56 + Math.floor(rnd() * 144);
-    const r = 2 + rnd() * 6;
-    const grad = g.createRadialGradient(0, 0, 0, 0, 0, r);
-    grad.addColorStop(0, `rgba(${v},${v},${v},0.65)`);
-    grad.addColorStop(1, `rgba(${v},${v},${v},0)`);
-    g.save();
-    g.translate(rnd() * 256, rnd() * 256);
-    g.fillStyle = grad;
-    g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fill();
-    g.restore();
-  }
-  for (let i = 0; i < 500; i++) {
-    const v = 200 + Math.floor(rnd() * 55);
-    g.fillStyle = `rgba(${v},${v},${v},0.8)`;
-    g.fillRect(rnd() * 256, rnd() * 256, 1.5, 1.5);
-  }
-  // Medium directional ripples: short strokes so the bump has facets
-  // at the scale the camera sees from 500-1000 m, not just micro-grain.
-  for (let i = 0; i < 700; i++) {
-    const x = rnd() * 256, y = rnd() * 256;
-    const a = rnd() * Math.PI;
-    const len = 8 + rnd() * 18;
-    const v = 70 + Math.floor(rnd() * 120);
-    g.strokeStyle = `rgba(${v},${v},${v},0.35)`;
-    g.lineWidth = 1.5 + rnd() * 2;
-    g.beginPath();
-    g.moveTo(x, y);
-    g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
-    g.stroke();
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(90, 90);
-  return tex;
-}
-
 // Sea colour texture (ref 10): the sea is never one flat tone — fine
 // wave streaks everywhere plus soft warm patches where the sunset sky
 // reflects. Painted near-white so it MULTIPLIES the vertex-colour
 // gradient instead of replacing it; the turquoise-to-teal base still
 // comes from the vertex colours.
-function seaColorTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 512;
-  const g = c.getContext('2d');
-  g.fillStyle = '#FFFFFF';
-  g.fillRect(0, 0, 512, 512);
-  let seed = 31337;
-  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  // Fine wave streaks: short thin light/dark dashes, all directions.
-  // v10: many more streaks (4200) at higher alpha so the sea has fine
-  // ripple texture EVERYWHERE (ref 10), not just inside the glitter path.
-  for (let i = 0; i < 4200; i++) {
-    const x = rnd() * 512, y = rnd() * 512;
-    const a = rnd() * Math.PI;
-    const len = 6 + rnd() * 22;
-    const light = rnd() > 0.5;
-    g.strokeStyle = light ? `rgba(255,255,255,${0.07 + rnd() * 0.12})` : `rgba(10,40,50,${0.07 + rnd() * 0.12})`;
-    g.lineWidth = 1 + rnd() * 1.5;
-    g.beginPath();
-    g.moveTo(x, y);
-    g.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
-    g.stroke();
-  }
-  // Warm sky-reflection patches: soft orange-pink blobs at low alpha.
-  for (let i = 0; i < 40; i++) {
-    const x = rnd() * 512, y = rnd() * 512, r = 30 + rnd() * 70;
-    const grad = g.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, `rgba(255,170,110,${0.10 + rnd() * 0.10})`);
-    grad.addColorStop(1, 'rgba(255,170,110,0)');
-    g.fillStyle = grad;
-    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-  }
-  // Fine speckle.
-  for (let i = 0; i < 1800; i++) {
-    const v = rnd() > 0.5 ? 255 : 30;
-    g.fillStyle = `rgba(${v},${v},${v},0.08)`;
-    g.fillRect(rnd() * 512, rnd() * 512, 1.5, 1.5);
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(24, 24);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
 // Runway surface: asphalt grain, centreline dashes, threshold bars and
 // the "27" / "09" numbers, painted once on a canvas and laid on the strip.
 function runwayTexture() {
@@ -680,7 +579,7 @@ function roundedBoxGeometry(w, h, d, r) {
   return geo;
 }
 
-export function buildTerrain(scene) {
+export async function buildTerrain(scene) {
   const group = new THREE.Group();
   group.name = 'terrain';
 
@@ -705,35 +604,30 @@ export function buildTerrain(scene) {
   ground.receiveShadow = true;
   group.add(ground);
 
-  // Sea: a wide disc, turquoise near the islands, deep teal far out.
-  // Phong specular gives the sun a BROAD glitter field across the
-  // water (ref 08): lower shininess + brighter warm specular, broken
-  // into sparkles by the dense bump map — not the thin smooth beam it
-  // used to be. Base water is a touch deeper so the glitter reads.
-  const tmp = new THREE.Color();
-  const seaGeo = new THREE.CircleGeometry(9500, 64);
-  seaGeo.rotateX(-Math.PI / 2);
-  const spos = seaGeo.attributes.position;
-  const seaCols = new Float32Array(spos.count * 3);
-  const near = new THREE.Color(0x2AB8AC), far = new THREE.Color(0x17707E);
-  for (let i = 0; i < spos.count; i++) {
-    const x = spos.getX(i), z = spos.getZ(i);
-    const r = Math.sqrt(x * x + z * z) / 9500;
-    tmp.copy(near).lerp(far, Math.min(1, r * 1.4));
-    // Fine streak variation (ref 10): the sea is never one flat tone —
-    // two octaves now, so there are large soft patches as well as streaks.
-    tmp.multiplyScalar(0.94 + valueNoise(x * 0.02, z * 0.02) * 0.12 + valueNoise(x * 0.008 + 40, z * 0.008 + 40) * 0.10);
-    seaCols[i * 3] = tmp.r; seaCols[i * 3 + 1] = tmp.g; seaCols[i * 3 + 2] = tmp.b;
-  }
-  seaGeo.setAttribute('color', new THREE.BufferAttribute(seaCols, 3));
-  const sea = new THREE.Mesh(
-    seaGeo,
-    new THREE.MeshPhongMaterial({
-      map: seaColorTexture(), vertexColors: true, transparent: true, opacity: 0.96,
-      shininess: 130, specular: 0xFFC27A, emissive: 0x082A2E,
-      bumpMap: seaBumpTexture(), bumpScale: 2.2,
-    }),
+  // Sea v21: the three.js Water addon — a real reflective sea. The
+  // reflection pass mirrors the physical sky, so the sunset glints on
+  // the water for real (ref 08/10), and the normal map breaks the sun
+  // into sparkles. Water colour is fadli's palette sea (#0E7C86 deep
+  // teal); the sun tint is warm gold. The old Phong disc with its
+  // near/far vertex-colour gradient is gone — the reflection carries
+  // the colour now. Fog on, so the far sea melts into the haze like
+  // the old disc did.
+  const waterNormals = await new THREE.TextureLoader().loadAsync('./assets/textures/waternormals.jpg');
+  waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
+  const sea = new Water(
+    new THREE.PlaneGeometry(19000, 19000),
+    {
+      textureWidth: 512,
+      textureHeight: 512,
+      waterNormals,
+      sunDirection: SUN_DIR.clone(),
+      sunColor: 0xFFD27A,
+      waterColor: 0x0E7C86,
+      distortionScale: 3.2,
+      fog: true,
+    },
   );
+  sea.rotation.x = -Math.PI / 2;
   sea.position.y = 0.4;
   sea.name = 'sea';
   group.add(sea);
