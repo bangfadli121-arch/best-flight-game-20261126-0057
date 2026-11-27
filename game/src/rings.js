@@ -112,9 +112,9 @@ export class RingCourse {
     // 200 m: a wide halo, not a pinprick.
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({
       map: this.makeGlowTexture(), color: 0xFFB300, transparent: true,
-      opacity: 0.85, depthWrite: false,
+      opacity: 0.65, depthWrite: false,
     }));
-    this.glow.scale.set(180, 180, 1);
+    this.glow.scale.set(140, 140, 1);
     this.group.add(this.glow);
 
     scene.add(this.group);
@@ -137,8 +137,15 @@ export class RingCourse {
   makeLabelSprite(text) {
     const tex = ringLabelTexture(text);
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+    // v21 fix: the label is a HUD-like readout — it must read over the
+    // gate's glow, not wash out behind it (ring 7's label was half
+    // hidden by the glow in shot 2). depthTest off + high renderOrder
+    // so it always draws on top; the label sits right at its gate, so
+    // showing through terrain is not a practical risk.
+    mat.depthTest = false;
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(64, 12, 1);
+    sprite.renderOrder = 20;
     return sprite;
   }
 
@@ -223,7 +230,11 @@ export class RingCourse {
       // those two gates' labels (into the gate opening, still attached
       // and visible); rings 1 and 4 are far above the terrain and are
       // unchanged. terrain.js imports only three, so no cycle.
-      const labelY = Math.max(def.y - def.r - 12, terrainHeight(def.x, def.z) + 10);
+      // v21: label hangs 22 m below the gate (was 12) — the GLB jet is
+      // longer/wider than the v20 loft, so at 12 m its wing crossed the
+      // "RING 1 — 66 m" pill in the cover shot. The terrain clamp below
+      // still protects the low gates (rings 2/7).
+      const labelY = Math.max(def.y - def.r - 22, terrainHeight(def.x, def.z) + 10);
       this.labelSprite.position.set(def.x, labelY, def.z);
       this.glow.position.set(def.x, def.y, def.z);
       this.glow.visible = true;
