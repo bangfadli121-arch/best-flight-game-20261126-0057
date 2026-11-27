@@ -51,12 +51,19 @@ function cumulusTexture() {
     g.fillStyle = grad;
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
   };
-  // Wide flat base, domed top.
-  for (const [x, r] of [[30, 42], [80, 46], [130, 48], [180, 46], [226, 40]]) puff(x, 190, r);
-  for (const [x, r] of [[55, 46], [105, 50], [155, 50], [205, 44]]) puff(x, 150, r);
-  for (const [x, r] of [[80, 44], [130, 46], [180, 42]]) puff(x, 110, r);
-  for (const [x, r] of [[105, 38], [150, 38]]) puff(x, 72, r);
-  puff(128, 40, 30);
+  // v21 fix: FLAT-TOPPED low mound, not a pointed dome. The old
+  // layout tapered to ONE puff at the apex — against the red sky each
+  // bank read as a row of orange FLAMES. A flat top (3 puffs across
+  // the top row) + content only in the lower two-thirds of the canvas
+  // reads as a lit cloud, not fire. The sprite already squashes the
+  // texture vertically (0.42-0.58), so a low wide mound in the
+  // texture renders very flat in the sky.
+  // Wide flat base, low domed top.
+  for (const [x, r] of [[20, 38], [64, 42], [110, 44], [156, 44], [200, 42], [234, 36]]) puff(x, 214, r);
+  for (const [x, r] of [[44, 40], [88, 44], [132, 44], [176, 42], [214, 38]]) puff(x, 182, r);
+  for (const [x, r] of [[66, 38], [108, 40], [150, 40], [190, 36]]) puff(x, 152, r);
+  for (const [x, r] of [[88, 34], [126, 36], [164, 34], [196, 30]]) puff(x, 126, r);
+  for (const [x, r] of [[112, 30], [146, 32], [178, 28]]) puff(x, 104, r);
   // Dark shadow puffs at the base (ref 08): a lit cloud has a dark
   // mauve-brown underside. Without it the whole sprite is one flat
   // yellow blob — the v8 defect.
@@ -72,13 +79,15 @@ function cumulusTexture() {
   shadow(196, 215, 40, 0.55);
   shadow(95, 232, 34, 0.5);
   shadow(160, 232, 34, 0.5);
-  // Sunset tint: bright gold-white on top, orange in the middle, dark
-  // mauve at the base — the gradient is what gives the cloud its lit
-  // top and shadowed belly instead of one flat yellow.
+  // Sunset tint: warm orange on top (v21 fix: was near-white
+  // gold-white at the top — that white-hot apex is what made the
+  // banks read as flames), orange in the middle, dark mauve at the
+  // base — the gradient is what gives the cloud its lit top and
+  // shadowed belly instead of one flat yellow.
   g.globalCompositeOperation = 'source-atop';
   const tint = g.createLinearGradient(0, 0, 0, 256);
-  tint.addColorStop(0, 'rgba(255,246,220,1)');
-  tint.addColorStop(0.4, 'rgba(255,217,160,1)');
+  tint.addColorStop(0, 'rgba(255,213,158,1)');
+  tint.addColorStop(0.4, 'rgba(255,196,130,1)');
   tint.addColorStop(0.7, 'rgba(255,158,87,1)');
   tint.addColorStop(1, 'rgba(196,120,110,1)');
   g.fillStyle = tint;
@@ -89,7 +98,9 @@ function cumulusTexture() {
   return tex;
 }
 
-// Grey smoke: a loose cluster of soft puffs, denser in the middle.
+// Grey ash: a loose cluster of big soft overlapping puffs, so the
+// column reads as one soft mass — not distinct hard rings (v21 fix:
+// the old small puffs read as grey rings above the crater).
 function smokeTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
@@ -101,14 +112,20 @@ function smokeTexture() {
     g.fillStyle = grad;
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
   };
-  puff(64, 70, 46, 0.85);
-  puff(38, 84, 34, 0.7);
-  puff(90, 84, 34, 0.7);
-  puff(48, 44, 30, 0.7);
-  puff(82, 44, 28, 0.65);
-  puff(64, 30, 24, 0.6);
+  puff(64, 70, 56, 0.7);
+  puff(34, 88, 42, 0.55);
+  puff(94, 88, 42, 0.55);
+  puff(44, 42, 38, 0.55);
+  puff(86, 42, 36, 0.5);
+  puff(64, 26, 30, 0.45);
+  puff(20, 64, 26, 0.4);
+  puff(108, 64, 26, 0.4);
   return new THREE.CanvasTexture(c);
 }
+
+// The sun direction is shared: the dome's sun disc, the directional
+// lights, and the Water's glitter path all use it. Elevation ~9°.
+export const SUN_DIR = new THREE.Vector3(-0.82, 0.16, 0.42).normalize();
 
 export function buildSky(scene) {
   const group = new THREE.Group();
@@ -159,7 +176,7 @@ export function buildSky(scene) {
   // Low sun disc + wide glow, low in the west. v8 (ref 08): the disc
   // and glow are bigger — in the Ace Combat shot the sun dominates the
   // upper frame and its haze washes the whole sky gold.
-  const sunDir = new THREE.Vector3(-0.82, 0.16, 0.42).normalize();
+  const sunDir = SUN_DIR;
   const sunPos = sunDir.clone().multiplyScalar(7800);
   const sun = new THREE.Mesh(
     new THREE.CircleGeometry(420, 40),
@@ -217,8 +234,8 @@ export function buildSky(scene) {
       const baseMat = p % 2 ? cloudMat : cloudMat2;
       const mat = baseMat.clone();
       mat.color.setHex(palette[Math.floor(rnd() * palette.length)]);
-      mat.opacity = 0.55 + rnd() * 0.4;
-      mat.rotation = (rnd() - 0.5) * 0.8;
+      mat.opacity = 0.5 + rnd() * 0.3;
+      mat.rotation = (rnd() - 0.5) * 0.5;
       const s = new THREE.Sprite(mat);
       s.position.set(
         cx + tx * u * span / 2 + (rnd() - 0.5) * 120,
@@ -251,22 +268,26 @@ export function buildSky(scene) {
   }
   group.add(cloudsHigh);
 
-  // Volcano smoke: a slow column of grey puffs over the crater, wider and
-  // darker toward the top so the column reads as rising smoke.
+  // Volcano smoke: a slow column of grey-brown ash over the crater,
+  // wider and darker toward the top so the column reads as rising
+  // smoke. v21 fix: warm dark ash (was pale grey), softer opacity,
+  // bigger puffs, and a CLONED material per puff — the old code shared
+  // one material, so the per-puff fade in update() never worked and
+  // every puff read as the same hard grey ring.
   const smoke = new THREE.Group();
   smoke.name = 'volcano-smoke';
   const smokeMat = new THREE.MeshBasicMaterial({
-    map: smokeTexture(), transparent: true, opacity: 0.5, depthWrite: false,
-    color: 0x9A9AA8, fog: false,
+    map: smokeTexture(), transparent: true, opacity: 0.38, depthWrite: false,
+    color: 0x6B5F55, fog: false,
   });
   const puffs = [];
   for (let i = 0; i < 11; i++) {
-    const s = new THREE.Sprite(smokeMat);
+    const s = new THREE.Sprite(smokeMat.clone());
     s.userData.baseY = 520 + i * 50;
     s.userData.phase = i * 0.7;
     s.position.set(-1700 + (i % 3 - 1) * 26, s.userData.baseY, -1500 + (i % 2) * 20);
-    const w = 120 + i * 24;
-    s.scale.set(w, w * 0.55, 1);
+    const w = 150 + i * 30;
+    s.scale.set(w, w * 0.7, 1);
     puffs.push(s);
     smoke.add(s);
   }
@@ -293,9 +314,9 @@ export function buildSky(scene) {
         const cyc = (t * 0.03 + s.userData.phase / 9) % 1;
         s.position.y = s.userData.baseY + cyc * 260;
         s.position.x = -1700 + (s.userData.phase % 3 - 1) * 26 + cyc * 190;
-        s.material.opacity = 0.5 * (1 - cyc * 0.55);
-        const w = 130 + cyc * 260;
-        s.scale.set(w, w * 0.55, 1);
+        s.material.opacity = 0.38 * (1 - cyc * 0.5);
+        const w = 160 + cyc * 300;
+        s.scale.set(w, w * 0.7, 1);
       }
       // Clouds drift almost imperceptibly, the high layer a touch faster.
       clouds.position.x = Math.sin(t * 0.004) * 60;
