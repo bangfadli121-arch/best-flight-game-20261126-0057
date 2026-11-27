@@ -4,6 +4,11 @@
 // starts flying at once: no title screen, the first frame is gameplay.
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildTerrain, terrainHeight, RUNWAY } from './terrain.js';
 import { buildSky } from './sky.js';
 import { buildAircraft } from './aircraft.js';
@@ -18,9 +23,16 @@ const SHOT = Number(params.get('shot') || 0);
 // Staged poses for the four screenshots: real game states, frozen in place
 // so the composition is exactly the one the maker chose.
 const SHOTS = {
+  // v21: cam 1.0 (was 0.82, then 0.92) — the GLB jet is 16.4 m long
+  // (tail 8.2 m behind centre vs ~7 m for the v20 loft); even at 0.92
+  // the short afterburner tongues dipped behind the bottom HUD. At 1.0
+  // the jet is the live-gameplay size and the tail + flames clear it.
   // Jet cruise at 900 km/h with the burners lit for the cover: gold gate
   // ahead, terraces + village + volcano behind it.
-  1: { pos: [312, 152, 965], yaw: -2.96, roll: 0, ring: 0, dusk: 0.12, score: 0, time: 240, fuel: 100, speed: 250, throttle: 0.95, ab: true, cam: 0.82, lookY: 0.0 },
+  // v21: cam 0.92 (was 0.82) — the GLB jet is 16.4 m long (tail 8.2 m
+  // behind centre vs ~7 m for the v20 loft), so at cam 0.82 the
+  // tailpipes + afterburner flames slid behind the bottom HUD.
+  1: { pos: [312, 152, 965], yaw: -2.96, roll: 0, ring: 0, dusk: 0.12, score: 0, time: 240, fuel: 100, speed: 250, throttle: 0.95, ab: true, cam: 1.0, lookY: 0.0 },
   // Shot 2: runway approach from the NORTH-WEST, 260 m out, heading
   // south-east at the low gate. The old head-on pose from the west put
   // the gate edge-on to the camera (the ring faces the previous gate,
@@ -49,7 +61,12 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.22; // v18: brighter for the silver jet
+// v21: 0.9 — the dome is LDR (v20 used 1.22 direct); the GLB jet at
+// 1.22 went white because its env map came from the white Sky addon.
+// With the dome back, the env map is warm (orange/purple), so 0.9
+// keeps the sunset saturated without washing the jet out. The jet's
+// envMapIntensity was also dropped to 0.4 as a second guard.
+renderer.toneMappingExposure = 0.9;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 // Soft shadows: the sun throws the plane's shadow onto the terrain below.
 renderer.shadowMap.enabled = true;
@@ -61,6 +78,25 @@ scene.fog = new THREE.Fog(0x8A4A5A, 1500, 7500);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 20000);
 camera.position.set(500, 170, 1520);
+
+// v21 post-processing: the render goes through a composer instead of
+// straight to the screen. RenderPass -> light bloom (sun, gold rings,
+// embers only) -> SMAA (the composer target has no MSAA) -> OutputPass
+// LAST, which applies the ACES tone mapping + sRGB conversion.
+// NOTE: renderer.toneMapping stays ACESFilmic — OutputPass reads it;
+// the RenderPass itself renders linear into the composer's target.
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.25, // strength — light: only the sun, gold rings, embers bloom
+  0.55, // radius
+  0.85, // threshold — the dome is LDR (<=1.0) so only the sun disc,
+        // the ring's emissive (2.0) and the brightest cloud tops bloom
+);
+composer.addPass(bloomPass);
+composer.addPass(new SMAAPass(window.innerWidth, window.innerHeight));
+composer.addPass(new OutputPass());
 
 const sky = buildSky(scene);
 // v8 light rebalance — the v7 defect was a GOLD jet: sun 0xFFB36B at 3.0
@@ -110,7 +146,7 @@ scene.add(camLight);
 scene.add(camLight.target);
 scene.add(new THREE.HemisphereLight(0x93A7C9, 0x1E3A34, 1.45));
 
-buildTerrain(scene);
+await buildTerrain(scene);
 // v19: procedural sunset ENVIRONMENT MAP for the jet's metal. Baked once
 // from a tiny dedicated scene (gradient sky + sun disc + dark sea) —
 // no external assets, fully offline. The aircraft's standard materials
@@ -161,7 +197,9 @@ const envScene = new THREE.Scene();
 }
 const envTex = pmrem.fromScene(envScene, 0.04, 0.1, 200).texture;
 pmrem.dispose();
-const aircraft = buildAircraft(envTex);
+// v21: the jet is a GLB now, so the build is async — the game only
+// starts once the model is loaded (no pop-in, no empty first frames).
+const aircraft = await buildAircraft(envTex);
 scene.add(aircraft.group);
 const model = new FlightModel();
 const rings = new RingCourse(scene);
@@ -212,7 +250,13 @@ window.__flightGame = {
   get timeLeft() { return timeLeft; },
   get state() { return model.state; },
   errors: [],
+  ready: false, // set true after 3 frames: jet + water fully loaded
 };
+if (!aircraft.loaded) {
+  window.__flightGame.errors.push(
+    'aircraft GLB failed to load' + (window.__aircraftError ? ': ' + window.__aircraftError : ''),
+  );
+}
 window.addEventListener('error', (e) => window.__flightGame.errors.push(String(e.message)));
 
 // ------------------------------------------------------------------ input
@@ -243,6 +287,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
   hud.resize();
 });
 
@@ -392,6 +437,7 @@ function hudState() {
 // ------------------------------------------------------------------ loop
 const clock = new THREE.Clock();
 let elapsed = 0;
+let framesRendered = 0;
 
 function frame() {
   requestAnimationFrame(frame);
@@ -445,6 +491,9 @@ function frame() {
     staging ? !!stagedShot.ab : (model.state === 'flying' && model.throttle > 0.85),
     dt,
   );
+  // Stabilator deflection with the controls (live play only; staged
+  // shots hold the pose).
+  aircraft.setControls(staging ? 0 : input.pitch, staging ? 0 : input.roll);
 
   // Ambient motion: clouds, smoke, ring pulse, label distance.
   sky.update(dt);
@@ -478,7 +527,10 @@ function frame() {
   camLight.target.position.copy(model.pos);
   camLight.target.updateMatrixWorld();
   hud.draw(hudState());
-  renderer.render(scene, camera);
+  composer.render();
+  // Screenshot hook: the game is fully up (jet + water loaded) after a
+  // few frames — probes wait for this instead of guessing a timeout.
+  if (++framesRendered === 3) window.__flightGame.ready = true;
 }
 
 frame();
