@@ -1042,5 +1042,14 @@ export class Hud {
       g.fillText(state.subMessage || '', w / 2, my + 42 * s + 44);
       g.textAlign = 'left';
     }
+
+    // v21 credit (CC BY 4.0): the jet is a real model, not a sculpt —
+    // attribution stays on screen, tiny and dim, bottom centre margin.
+    g.save();
+    g.fillStyle = 'rgba(245,245,245,0.45)';
+    g.font = `500 ${Math.round(10 * s)}px system-ui, sans-serif`;
+    g.textAlign = 'center';
+    g.fillText('Jet model: “Multirole Fighter” by vinish.dev, CC BY 4.0', w / 2, h - 4 * s);
+    g.restore();
   }
 }
